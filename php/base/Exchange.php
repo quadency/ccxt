@@ -172,6 +172,7 @@ class Exchange {
         'itbit',
         'kkex',
         'kraken',
+        'kryptono',
         'kucoin',
         'kuna',
         'lakebtc',

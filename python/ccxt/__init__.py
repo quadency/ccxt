@@ -153,6 +153,7 @@ from ccxt.indodax import indodax                            # noqa: F401
 from ccxt.itbit import itbit                                # noqa: F401
 from ccxt.kkex import kkex                                  # noqa: F401
 from ccxt.kraken import kraken                              # noqa: F401
+from ccxt.kryptono import kryptono                          # noqa: F401
 from ccxt.kucoin import kucoin                              # noqa: F401
 from ccxt.kuna import kuna                                  # noqa: F401
 from ccxt.lakebtc import lakebtc                            # noqa: F401
@@ -280,6 +281,7 @@ exchanges = [
     'itbit',
     'kkex',
     'kraken',
+    'kryptono',
     'kucoin',
     'kuna',
     'lakebtc',

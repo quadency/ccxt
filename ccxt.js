@@ -130,6 +130,7 @@ const exchanges = {
     'itbit':                   require ('./js/itbit.js'),
     'kkex':                    require ('./js/kkex.js'),
     'kraken':                  require ('./js/kraken.js'),
+    'kryptono':                require ('./js/kryptono.js'),
     'kucoin':                  require ('./js/kucoin.js'),
     'kuna':                    require ('./js/kuna.js'),
     'lakebtc':                 require ('./js/lakebtc.js'),

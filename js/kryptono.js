@@ -29,7 +29,6 @@ module.exports = class kryptono extends Exchange {
                 'fetchOrderBook': true,
                 'fetchTrades': true,
                 'fetchOHLCV': true,
-
                 'createMarketOrder': false,
                 'fetchDepositAddress': false, // TODO: Check if it is available again to make sure.
                 'fetchClosedOrders': false,
