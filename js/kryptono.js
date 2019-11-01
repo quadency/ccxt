@@ -16,10 +16,9 @@ module.exports = class kryptono extends Exchange {
             'countries': ['SG'],
             'version': 'v2',
             'rateLimit': 1000, // TODO: Check if this is the corrrect as per CCXT requirments. Kryptono gives 1000 minute intervals.
-            'certified': true,
+            'certified': true, // TODO: Verify with Tony.
             // new metainfo interface
             'has': {
-                // TODO : Check all of these properties are there or not to make sure.
                 'CORS': true,
                 'fetchMarkets': true,
                 'fetchCurrencies': true,
@@ -29,6 +28,8 @@ module.exports = class kryptono extends Exchange {
                 'fetchOrderBook': true,
                 'fetchTrades': true,
                 'fetchOHLCV': true,
+                'fetchBalance': true,
+                // TODO : Check all of these properties are there or not to make sure.
                 'createMarketOrder': false,
                 'fetchDepositAddress': false, // TODO: Check if it is available again to make sure.
                 'fetchClosedOrders': false,
@@ -68,6 +69,7 @@ module.exports = class kryptono extends Exchange {
                     'get': [
                         'exchange-info',
                         'market-price',
+                        'account/balances',
                     ],
                 },
                 'market': {
@@ -166,24 +168,24 @@ module.exports = class kryptono extends Exchange {
         return result;
     }
 
-    // async fetchBalance (params = {}) {
-    //     await this.loadMarkets ();
-    //     const response = await this.accountGetBalances (params);
-    //     const balances = this.safeValue (response, 'result');
-    //     const result = { 'info': balances };
-    //     const indexed = this.indexBy (balances, 'Currency');
-    //     const currencyIds = Object.keys (indexed);
-    //     for (let i = 0; i < currencyIds.length; i++) {
-    //         const currencyId = currencyIds[i];
-    //         const code = this.safeCurrencyCode (currencyId);
-    //         const account = this.account ();
-    //         const balance = indexed[currencyId];
-    //         account['free'] = this.safeFloat (balance, 'Available');
-    //         account['total'] = this.safeFloat (balance, 'Balance');
-    //         result[code] = account;
-    //     }
-    //     return this.parseBalance (result);
-    // }
+    async fetchBalance (params = {}) {
+        await this.loadMarkets ();
+        const response = await this.v2GetAccountBalances (params);
+        // const balances = this.safeValue (response, 'result');
+        const result = { 'info': response };
+        // const indexed = this.indexBy (balances, 'Currency');
+        // const currencyIds = Object.keys (indexed);
+        for (let i = 0; i < response.length; i++) {
+            // const currencyId = response[i].currency_code;
+            // const code = this.safeCurrencyCode (currencyId);
+            const account = this.account ();
+            // const balance = response[i].total;
+            account['free'] = this.safeFloat (response[i], 'available');
+            account['total'] = this.safeFloat (response[i], 'total');
+            result[response[i].currency_code] = account;
+        }
+        return this.parseBalance (result);
+    }
 
     async fetchOrderBook (symbol, limit = undefined, params = {}) {
         await this.loadMarkets ();
