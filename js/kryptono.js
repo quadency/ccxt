@@ -2,15 +2,15 @@
 
 //  ---------------------------------------------------------------------------
 
-const Exchange = require('./base/Exchange');
-const { BadSymbol, ExchangeError, ExchangeNotAvailable, AuthenticationError, InvalidOrder, InsufficientFunds, OrderNotFound, DDoSProtection, PermissionDenied, AddressPending, OnMaintenance } = require('./base/errors');
-const { TRUNCATE, DECIMAL_PLACES } = require('./base/functions/number');
+const Exchange = require ('./base/Exchange');
+const { BadSymbol, ExchangeError, ExchangeNotAvailable, AuthenticationError, InvalidOrder, InsufficientFunds, OrderNotFound, DDoSProtection, PermissionDenied, AddressPending, OnMaintenance } = require ('./base/errors');
+const { TRUNCATE, DECIMAL_PLACES } = require ('./base/functions/number');
 
 //  ---------------------------------------------------------------------------
 
 module.exports = class kryptono extends Exchange {
-    describe() {
-        return this.deepExtend(super.describe(), {
+    describe () {
+        return this.deepExtend (super.describe (), {
             'id': 'kryptono',
             'name': 'Kryptono',
             'countries': ['SG'],
@@ -57,10 +57,10 @@ module.exports = class kryptono extends Exchange {
                 },
                 'www': 'https://p.kryptono.exchange/k/home',
                 'doc': [
-                    'https://p.kryptono.exchange/k/api'
+                    'https://p.kryptono.exchange/k/api',
                 ],
                 'fees': [
-                    'https://kryptono.zendesk.com/hc/en-us/articles/360004347772-2-Fee-on-Kryptono-Exchange-'
+                    'https://kryptono.zendesk.com/hc/en-us/articles/360004347772-2-Fee-on-Kryptono-Exchange-',
                 ],
             },
             'api': {
@@ -100,21 +100,21 @@ module.exports = class kryptono extends Exchange {
                 'DUST_TRADE_DISALLOWED_MIN_VALUE': InvalidOrder,
                 'RESTRICTED_MARKET': BadSymbol,
                 'We are down for scheduled maintenance, but we\u2019ll be back up shortly.': OnMaintenance, // {"success":false,"message":"We are down for scheduled maintenance, but we\u2019ll be back up shortly.","result":null,"explanation":null}
-            }
+            },
         });
     }
 
-    costToPrecision(symbol, cost) {
-        return this.decimalToPrecision(cost, TRUNCATE, this.markets[symbol]['precision']['price'], DECIMAL_PLACES);
+    costToPrecision (symbol, cost) {
+        return this.decimalToPrecision (cost, TRUNCATE, this.markets[symbol]['precision']['price'], DECIMAL_PLACES);
     }
 
-    feeToPrecision(symbol, fee) {
-        return this.decimalToPrecision(fee, TRUNCATE, this.markets[symbol]['precision']['price'], DECIMAL_PLACES);
+    feeToPrecision (symbol, fee) {
+        return this.decimalToPrecision (fee, TRUNCATE, this.markets[symbol]['precision']['price'], DECIMAL_PLACES);
     }
 
-    async fetchMarkets(params = {}) {
-        const response = await this.v2GetMarketPrice(params);
-        // 
+    async fetchMarkets (params = {}) {
+        const response = await this.v2GetMarketPrice (params);
+        //
         // [
         //     {
         //         "symbol": "GTO_BTC",
@@ -122,26 +122,26 @@ module.exports = class kryptono extends Exchange {
         //         "updated_time": 1530682938651
         //     }
         // ]
-        // 
+        //
         const result = [];
         // const markets = this.safeValue (response, 'result');
         for (let i = 0; i < response.length; i++) {
             const market = response[i];
-            const name = this.safeString(market, 'symbol');
-            const baseId = name.split('_')[1];
-            const quoteId = name.split('_')[0];
+            const name = this.safeString (market, 'symbol');
+            const baseId = name.split ('_')[1];
+            const quoteId = name.split ('_')[0];
             const id = quoteId + this.options['symbolSeparator'] + baseId;
-            const base = this.safeCurrencyCode(baseId);
-            const quote = this.safeCurrencyCode(quoteId);
+            const base = this.safeCurrencyCode (baseId);
+            const quote = this.safeCurrencyCode (quoteId);
             const symbol = base + '/' + quote;
-            const pricePrecision = this.safeInteger(market, 'precision', 8);
+            const pricePrecision = this.safeInteger (market, 'precision', 8);
             const precision = {
                 'amount': 8,
                 'price': pricePrecision,
             };
-            const status = this.safeString(market, 'status');
+            const status = this.safeString (market, 'status');
             const active = (status === 'ONLINE');
-            result.push({
+            result.push ({
                 'id': id,
                 'symbol': symbol,
                 'base': base,
@@ -153,11 +153,11 @@ module.exports = class kryptono extends Exchange {
                 'precision': precision,
                 'limits': {
                     'amount': {
-                        'min': this.safeFloat(market, 'minTradeSize'),
+                        'min': this.safeFloat (market, 'minTradeSize'),
                         'max': undefined,
                     },
                     'price': {
-                        'min': Math.pow(10, -precision['price']),
+                        'min': Math.pow (10, -precision['price']),
                         'max': undefined,
                     },
                 },
@@ -185,13 +185,13 @@ module.exports = class kryptono extends Exchange {
     //     return this.parseBalance (result);
     // }
 
-    async fetchOrderBook(symbol, limit = undefined, params = {}) {
-        await this.loadMarkets();
+    async fetchOrderBook (symbol, limit = undefined, params = {}) {
+        await this.loadMarkets ();
         const request = {
             'symbol': symbol,
         };
-        const response = await this.v1GetDp(this.extend(request, params));
-        // 
+        const response = await this.v1GetDp (this.extend (request, params));
+        //
         // {
         //     "symbol" : "KNOW_BTC",
         //     "limit" : 100,
@@ -209,12 +209,12 @@ module.exports = class kryptono extends Exchange {
         //     ]
         //     "time" : 1529298130192
         //   }
-        // 
-        return this.parseOrderBook(response, response.time);
+        //
+        return this.parseOrderBook (response, response.time);
     }
 
-    async fetchCurrencies(params = {}) {
-        const response = await this.v2GetExchangeInfo(params);
+    async fetchCurrencies (params = {}) {
+        const response = await this.v2GetExchangeInfo (params);
         //
         // {
         //     "timezone": "UTC",
@@ -249,18 +249,18 @@ module.exports = class kryptono extends Exchange {
         //     ]
         //   }
         //
-        const currencies = this.safeValue(response, 'coins', []);
+        const currencies = this.safeValue (response, 'coins', []);
         const result = {};
         for (let i = 0; i < currencies.length; i++) {
             const currency = currencies[i];
-            const id = this.safeString(currency, 'currency_code');
+            const id = this.safeString (currency, 'currency_code');
             // TODO: will need to rethink the fees
             // to add support for multiple withdrawal/deposit methods and
             // differentiated fees for each particular method
-            const code = this.safeCurrencyCode(id);
+            const code = this.safeCurrencyCode (id);
             const precision = 8; // default precision, todo: fix "magic constants"
             // const address = this.safeValue (currency, 'BaseAddress');
-            const fee = this.safeFloat(currency, 'TxFee'); // todo: redesign
+            const fee = this.safeFloat (currency, 'TxFee'); // todo: redesign
             result[code] = {
                 'id': id,
                 'code': code,
@@ -273,11 +273,11 @@ module.exports = class kryptono extends Exchange {
                 'precision': precision,
                 'limits': {
                     'amount': {
-                        'min': Math.pow(10, -precision),
+                        'min': Math.pow (10, -precision),
                         'max': undefined,
                     },
                     'price': {
-                        'min': Math.pow(10, -precision),
+                        'min': Math.pow (10, -precision),
                         'max': undefined,
                     },
                     'cost': {
@@ -294,7 +294,7 @@ module.exports = class kryptono extends Exchange {
         return result;
     }
 
-    parseTicker(ticker, market = undefined) {
+    parseTicker (ticker, market = undefined) {
         //
         //     {
         //         "MarketName":"KNOW-BTC",
@@ -309,21 +309,21 @@ module.exports = class kryptono extends Exchange {
         //         "PrevDay":0.00001253
         //       }
         //
-        const timestamp = this.parse8601(this.safeString(ticker, 'TimeStamp'));
+        const timestamp = this.parse8601 (this.safeString (ticker, 'TimeStamp'));
         let symbol = undefined;
-        const marketId = this.safeString(ticker, 'MarketName');
+        const marketId = this.safeString (ticker, 'MarketName');
         if (marketId !== undefined) {
             if (marketId in this.markets_by_id) {
                 market = this.markets_by_id[marketId];
             } else {
-                symbol = this.parseSymbol(marketId);
+                symbol = this.parseSymbol (marketId);
             }
         }
         if ((symbol === undefined) && (market !== undefined)) {
             symbol = market['symbol'];
         }
-        const previous = this.safeFloat(ticker, 'PrevDay');
-        const last = this.safeFloat(ticker, 'Last');
+        const previous = this.safeFloat (ticker, 'PrevDay');
+        const last = this.safeFloat (ticker, 'Last');
         let change = undefined;
         let percentage = undefined;
         if (last !== undefined) {
@@ -337,12 +337,12 @@ module.exports = class kryptono extends Exchange {
         return {
             'symbol': symbol,
             'timestamp': timestamp,
-            'datetime': this.iso8601(timestamp),
-            'high': this.safeFloat(ticker, 'High'),
-            'low': this.safeFloat(ticker, 'Low'),
-            'bid': this.safeFloat(ticker, 'Bid'),
+            'datetime': this.iso8601 (timestamp),
+            'high': this.safeFloat (ticker, 'High'),
+            'low': this.safeFloat (ticker, 'Low'),
+            'bid': this.safeFloat (ticker, 'Bid'),
             'bidVolume': undefined,
-            'ask': this.safeFloat(ticker, 'Ask'),
+            'ask': this.safeFloat (ticker, 'Ask'),
             'askVolume': undefined,
             'vwap': undefined,
             'open': previous,
@@ -352,15 +352,15 @@ module.exports = class kryptono extends Exchange {
             'change': change,
             'percentage': percentage,
             'average': undefined,
-            'baseVolume': this.safeFloat(ticker, 'Volume'),
-            'quoteVolume': this.safeFloat(ticker, 'BaseVolume'),
+            'baseVolume': this.safeFloat (ticker, 'Volume'),
+            'quoteVolume': this.safeFloat (ticker, 'BaseVolume'),
             'info': ticker,
         };
     }
 
-    async fetchTickers(symbols = undefined, params = {}) {
-        await this.loadMarkets();
-        const response = await this.marketGetGetmarketsummaries(params);
+    async fetchTickers (symbols = undefined, params = {}) {
+        await this.loadMarkets ();
+        const response = await this.marketGetGetmarketsummaries (params);
         //
         // {
         //     "success": "true",
@@ -405,22 +405,22 @@ module.exports = class kryptono extends Exchange {
         //     "t": 1531208813959;
         //   }
         //
-        const result = this.safeValue(response, 'result');
+        const result = this.safeValue (response, 'result');
         const tickers = [];
         for (let i = 0; i < result.length; i++) {
-            const ticker = this.parseTicker(result[i]);
-            tickers.push(ticker);
+            const ticker = this.parseTicker (result[i]);
+            tickers.push (ticker);
         }
-        return this.filterByArray(tickers, 'symbol', symbols);
+        return this.filterByArray (tickers, 'symbol', symbols);
     }
 
-    async fetchTicker(symbol, params = {}) {
-        await this.loadMarkets();
-        const market = this.market(symbol);
+    async fetchTicker (symbol, params = {}) {
+        await this.loadMarkets ();
+        const market = this.market (symbol);
         const request = {
             'market': market['id'],
         };
-        const response = await this.marketGetGetmarketsummaries(this.extend(request, params));
+        const response = await this.marketGetGetmarketsummaries (this.extend (request, params));
         //
         // {
         //     "success": "true",
@@ -466,17 +466,17 @@ module.exports = class kryptono extends Exchange {
         //   }
         //
         const ticker = response['result'][0];
-        return this.parseTicker(ticker, market);
+        return this.parseTicker (ticker, market);
     }
 
-    async fetchTrades(symbol, since = undefined, limit = undefined, params = {}) {
-        await this.loadMarkets();
-        const market = this.market(symbol);
+    async fetchTrades (symbol, since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        const market = this.market (symbol);
         const request = {
             'symbol': symbol,
         };
-        const response = await this.v1GetHt(this.extend(request, params));
-        // 
+        const response = await this.v1GetHt (this.extend (request, params));
+        //
         // {
         // "symbol":"KNOW_BTC",
         // "limit":100,
@@ -491,19 +491,20 @@ module.exports = class kryptono extends Exchange {
         // ],
         // "time":1529298130192
         // }
-        // 
+        //
         if ('history' in response) {
             if (response['history'] !== undefined) {
-                const history = response.history.map((item) => {
+                const history = response.history.map ((item) => {
                     return { ...item, 'timestamp': item.time };
                 });
-                return this.parseTrades(history, market, since, limit);
+                return this.parseTrades (history, market, since, limit);
             }
         }
-        throw new ExchangeError(this.id + ' fetchTrades() returned undefined response');
+        throw new ExchangeError (this.id + ' fetchTrades() returned undefined response');
     }
-    parseOHLCV(ohlcv, market = undefined, timeframe = '1d', since = undefined, limit = undefined) {
-        const timestamp = this.parse8601(ohlcv['T'] + '+00:00');
+
+    parseOHLCV (ohlcv, market = undefined, timeframe = '1d', since = undefined, limit = undefined) {
+        const timestamp = this.parse8601 (ohlcv['T'] + '+00:00');
         return [
             timestamp,
             ohlcv['O'],
@@ -513,56 +514,57 @@ module.exports = class kryptono extends Exchange {
             ohlcv['V'],
         ];
     }
-    async fetchOHLCV(symbol, timeframe = '1m', since = undefined, limit = undefined, params = {}) {
-        await this.loadMarkets();
-        const market = this.market(symbol);
+
+    async fetchOHLCV (symbol, timeframe = '1m', since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        const market = this.market (symbol);
         const request = {
             'tickInterval': this.timeframes[timeframe],
             'marketName': market['id'],
         };
-        const response = await this.v2GetMarketGetTicks(this.extend(request, params));
+        const response = await this.v2GetMarketGetTicks (this.extend (request, params));
         if ('result' in response) {
             if (response['result']) {
-                return this.parseOHLCVs(response['result'], market, timeframe, since, limit);
+                return this.parseOHLCVs (response['result'], market, timeframe, since, limit);
             }
         }
     }
 
-    sign(path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
-        let url = this.implodeParams(this.urls['api'][api], {
+    sign (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
+        let url = this.implodeParams (this.urls['api'][api], {
             'hostname': this.hostname,
         }) + '/';
         if (api !== 'v2' && api !== 'v3' && api !== 'v3public') {
             url += this.version + '/';
         }
         if (api === 'public') {
-            url += api + '/' + method.toLowerCase() + path;
-            if (Object.keys(params).length) {
-                url += '?' + this.urlencode(params);
+            url += api + '/' + method.toLowerCase () + path;
+            if (Object.keys (params).length) {
+                url += '?' + this.urlencode (params);
             }
         } else if (api === 'v3public') {
             url += path;
-            if (Object.keys(params).length) {
-                url += '?' + this.urlencode(params);
+            if (Object.keys (params).length) {
+                url += '?' + this.urlencode (params);
             }
         } else if (api === 'v2') {
             url += path;
-            if (Object.keys(params).length) {
-                url += '?' + this.urlencode(params);
+            if (Object.keys (params).length) {
+                url += '?' + this.urlencode (params);
             }
         } else if (api === 'v3') {
             url += path;
-            if (Object.keys(params).length) {
-                url += '?' + this.rawencode(params);
+            if (Object.keys (params).length) {
+                url += '?' + this.rawencode (params);
             }
-            const contentHash = this.hash(this.encode(''), 'sha512', 'hex');
-            const timestamp = this.milliseconds().toString();
+            const contentHash = this.hash (this.encode (''), 'sha512', 'hex');
+            const timestamp = this.milliseconds ().toString ();
             let auth = timestamp + url + method + contentHash;
-            const subaccountId = this.safeValue(this.options, 'subaccountId');
+            const subaccountId = this.safeValue (this.options, 'subaccountId');
             if (subaccountId !== undefined) {
                 auth += subaccountId;
             }
-            const signature = this.hmac(this.encode(auth), this.encode(this.secret), 'sha512');
+            const signature = this.hmac (this.encode (auth), this.encode (this.secret), 'sha512');
             headers = {
                 'Api-Key': this.apiKey,
                 'Api-Timestamp': timestamp,
@@ -573,27 +575,27 @@ module.exports = class kryptono extends Exchange {
                 headers['Api-Subaccount-Id'] = subaccountId;
             }
         } else {
-            this.checkRequiredCredentials();
+            this.checkRequiredCredentials ();
             url += api + '/';
             if (((api === 'account') && (path !== 'withdraw')) || (path === 'openorders')) {
-                url += method.toLowerCase();
+                url += method.toLowerCase ();
             }
             const request = {
                 'apikey': this.apiKey,
             };
-            const disableNonce = this.safeValue(this.options, 'disableNonce');
+            const disableNonce = this.safeValue (this.options, 'disableNonce');
             if ((disableNonce === undefined) || !disableNonce) {
-                request['nonce'] = this.nonce();
+                request['nonce'] = this.nonce ();
             }
-            url += path + '?' + this.urlencode(this.extend(request, params));
-            const signature = this.hmac(this.encode(url), this.encode(this.secret), 'sha512');
+            url += path + '?' + this.urlencode (this.extend (request, params));
+            const signature = this.hmac (this.encode (url), this.encode (this.secret), 'sha512');
             headers = { 'apisign': signature };
         }
         return { 'url': url, 'method': method, 'body': body, 'headers': headers };
     }
 
-    async request(path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
-        const response = await this.fetch2(path, api, method, params, headers, body);
+    async request (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
+        const response = await this.fetch2 (path, api, method, params, headers, body);
         // a workaround for APIKEY_INVALID
         if ((api === 'account') || (api === 'market')) {
             this.options['hasAlreadyAuthenticatedSuccessfully'] = true;
