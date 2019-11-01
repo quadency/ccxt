@@ -114,29 +114,15 @@ module.exports = class kryptono extends Exchange {
 
     async fetchMarkets(params = {}) {
         const response = await this.v2GetMarketPrice(params);
-        //
-        //     [
-        //         {
-        //             "symbol":"LTC-BTC",
-        //             "baseCurrencySymbol":"LTC",
-        //             "quoteCurrencySymbol":"BTC",
-        //             "minTradeSize":"0.01686767",
-        //             "precision":8,
-        //             "status":"ONLINE", // "OFFLINE"
-        //             "createdAt":"2014-02-13T00:00:00Z"
-        //         },
-        //         {
-        //             "symbol":"VDX-USDT",
-        //             "baseCurrencySymbol":"VDX",
-        //             "quoteCurrencySymbol":"USDT",
-        //             "minTradeSize":"300.00000000",
-        //             "precision":8,
-        //             "status":"ONLINE", // "OFFLINE"
-        //             "createdAt":"2019-05-23T00:41:21.843Z",
-        //             "notice":"USDT has swapped to an ERC20-based token as of August 5, 2019."
-        //         }
-        //     ]
-        //
+        // 
+        // [
+        //     {
+        //         "symbol": "GTO_BTC",
+        //         "price": "0.00002542",
+        //         "updated_time": 1530682938651
+        //     }
+        // ]
+        // 
         const result = [];
         // const markets = this.safeValue (response, 'result');
         for (let i = 0; i < response.length; i++) {
@@ -205,30 +191,63 @@ module.exports = class kryptono extends Exchange {
             'symbol': symbol,
         };
         const response = await this.v1GetDp(this.extend(request, params));
+        // 
+        // {
+        //     "symbol" : "KNOW_BTC",
+        //     "limit" : 100,
+        //     "asks" : [
+        //       [
+        //         "0.00001850",   // price
+        //         "69.00000000"   // size
+        //       ]
+        //     ],
+        //     "bids" : [
+        //       [
+        //         "0.00001651",       // price
+        //         "11186.00000000"    // size
+        //       ]
+        //     ]
+        //     "time" : 1529298130192
+        //   }
+        // 
         return this.parseOrderBook(response, response.time);
     }
 
     async fetchCurrencies(params = {}) {
         const response = await this.v2GetExchangeInfo(params);
         //
-        //     {
-        //         "success": true,
-        //         "message": "",
-        //         "result": [
-        //             {
-        //                 "Currency": "BTC",
-        //                 "CurrencyLong":"Bitcoin",
-        //                 "MinConfirmation":2,
-        //                 "TxFee":0.00050000,
-        //                 "IsActive":true,
-        //                 "IsRestricted":false,
-        //                 "CoinType":"BITCOIN",
-        //                 "BaseAddress":"1N52wHoVR79PMDishab2XmRHsbekCdGquK",
-        //                 "Notice":null
-        //             },
-        //             ...,
-        //         ]
-        //     }
+        // {
+        //     "timezone": "UTC",
+        //     "server_time": 1530683054384,
+        //     "rate_limits": [
+        //       {
+        //         "type": "REQUESTS",
+        //         "interval": "MINUTE",
+        //         "limit": 1000
+        //       }
+        //     ],
+        //     "base_currencies": [
+        //       {
+        //         "currency_code": "KNOW",
+        //         "minimum_total_order": "100"
+        //       }
+        //     ],
+        //     "coins": [
+        //       {
+        //         "currency_code": "USDT",
+        //         "name": "Tether",
+        //         "minimum_order_amount": "1"
+        //       }
+        //     ],
+        //     "symbols": [
+        //       {
+        //         "symbol": "GTO_ETH",
+        //         "amount_limit_decimal": 0,
+        //         "price_limit_decimal": 8,
+        //         "allow_trading": true
+        //       }
+        //     ]
+        //   }
         //
         const currencies = this.safeValue(response, 'coins', []);
         const result = {};
@@ -278,20 +297,17 @@ module.exports = class kryptono extends Exchange {
     parseTicker(ticker, market = undefined) {
         //
         //     {
-        //         "MarketName":"BTC-ETH",
-        //         "High":0.02127099,
-        //         "Low":0.02035064,
-        //         "Volume":10288.40271571,
-        //         "Last":0.02070510,
-        //         "BaseVolume":214.64663206,
-        //         "TimeStamp":"2019-09-18T21:03:59.897",
-        //         "Bid":0.02070509,
-        //         "Ask":0.02070510,
-        //         "OpenBuyOrders":1228,
-        //         "OpenSellOrders":5899,
-        //         "PrevDay":0.02082823,
-        //         "Created":"2015-08-14T09:02:24.817"
-        //     }
+        //         "MarketName":"KNOW-BTC",
+        //         "High":0.00001313,
+        //         "Low":0.0000121,
+        //         "BaseVolume":24.06681016,
+        //         "Last":0.00001253,
+        //         "TimeStamp":"2018-07-10T07:44:56.936Z",
+        //         "Volume":1920735.0486831602,
+        //         "Bid":"0.00001260",
+        //         "Ask":"0.00001242",
+        //         "PrevDay":0.00001253
+        //       }
         //
         const timestamp = this.parse8601(this.safeString(ticker, 'TimeStamp'));
         let symbol = undefined;
@@ -345,6 +361,50 @@ module.exports = class kryptono extends Exchange {
     async fetchTickers(symbols = undefined, params = {}) {
         await this.loadMarkets();
         const response = await this.marketGetGetmarketsummaries(params);
+        //
+        // {
+        //     "success": "true",
+        //     "message": "",
+        //     "result": [
+        //       {
+        //         "MarketName":"KNOW-BTC",
+        //         "High":0.00001313,
+        //         "Low":0.0000121,
+        //         "BaseVolume":24.06681016,
+        //         "Last":0.00001253,
+        //         "TimeStamp":"2018-07-10T07:44:56.936Z",
+        //         "Volume":1920735.0486831602,
+        //         "Bid":"0.00001260",
+        //         "Ask":"0.00001242",
+        //         "PrevDay":0.00001253
+        //       },
+        //       {
+        //         "MarketName":"KNOW-ETH",
+        //         "High":0.00018348,
+        //         "Low":0.00015765,
+        //         "BaseVolume":244.82775523,
+        //         "Last":0.00017166,
+        //         "TimeStamp":"2018-07-10T07:46:47.958Z",
+        //         "Volume":1426236.4862518935,
+        //         "Bid":"0.00017663",
+        //         "Ask":"0.00017001",
+        //         "PrevDay":0.00017166,
+        //       },
+        //       ...
+        //     ],
+        //     "volumes": [
+        //       {
+        //         "CoinName":"BTC",
+        //         "Volume":571.64749041
+        //       },
+        //       {
+        //         "CoinName":"KNOW",
+        //         "Volume":19873172.0273
+        //       }
+        //     ],
+        //     "t": 1531208813959;
+        //   }
+        //
         const result = this.safeValue(response, 'result');
         const tickers = [];
         for (let i = 0; i < result.length; i++) {
@@ -362,27 +422,48 @@ module.exports = class kryptono extends Exchange {
         };
         const response = await this.marketGetGetmarketsummaries(this.extend(request, params));
         //
-        //     {
-        //         "success":true,
-        //         "message":"",
-        //         "result":[
-        //             {
-        //                 "MarketName":"BTC-ETH",
-        //                 "High":0.02127099,
-        //                 "Low":0.02035064,
-        //                 "Volume":10288.40271571,
-        //                 "Last":0.02070510,
-        //                 "BaseVolume":214.64663206,
-        //                 "TimeStamp":"2019-09-18T21:03:59.897",
-        //                 "Bid":0.02070509,
-        //                 "Ask":0.02070510,
-        //                 "OpenBuyOrders":1228,
-        //                 "OpenSellOrders":5899,
-        //                 "PrevDay":0.02082823,
-        //                 "Created":"2015-08-14T09:02:24.817"
-        //             }
-        //         ]
-        //     }
+        // {
+        //     "success": "true",
+        //     "message": "",
+        //     "result": [
+        //       {
+        //         "MarketName":"KNOW-BTC",
+        //         "High":0.00001313,
+        //         "Low":0.0000121,
+        //         "BaseVolume":24.06681016,
+        //         "Last":0.00001253,
+        //         "TimeStamp":"2018-07-10T07:44:56.936Z",
+        //         "Volume":1920735.0486831602,
+        //         "Bid":"0.00001260",
+        //         "Ask":"0.00001242",
+        //         "PrevDay":0.00001253
+        //       },
+        //       {
+        //         "MarketName":"KNOW-ETH",
+        //         "High":0.00018348,
+        //         "Low":0.00015765,
+        //         "BaseVolume":244.82775523,
+        //         "Last":0.00017166,
+        //         "TimeStamp":"2018-07-10T07:46:47.958Z",
+        //         "Volume":1426236.4862518935,
+        //         "Bid":"0.00017663",
+        //         "Ask":"0.00017001",
+        //         "PrevDay":0.00017166,
+        //       },
+        //       ...
+        //     ],
+        //     "volumes": [
+        //       {
+        //         "CoinName":"BTC",
+        //         "Volume":571.64749041
+        //       },
+        //       {
+        //         "CoinName":"KNOW",
+        //         "Volume":19873172.0273
+        //       }
+        //     ],
+        //     "t": 1531208813959;
+        //   }
         //
         const ticker = response['result'][0];
         return this.parseTicker(ticker, market);
@@ -395,6 +476,22 @@ module.exports = class kryptono extends Exchange {
             'symbol': symbol,
         };
         const response = await this.v1GetHt(this.extend(request, params));
+        // 
+        // {
+        // "symbol":"KNOW_BTC",
+        // "limit":100,
+        // "history":[
+        //     {
+        //     "id":139638,
+        //     "price":"0.00001723",
+        //     "qty":"81.00000000",
+        //     "isBuyerMaker":false,
+        //     "time":1529262196270
+        //     }
+        // ],
+        // "time":1529298130192
+        // }
+        // 
         if ('history' in response) {
             if (response['history'] !== undefined) {
                 const history = response.history.map((item) => {
