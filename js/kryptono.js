@@ -108,7 +108,7 @@ module.exports = class kryptono extends Exchange {
             'options': {
                 'parseOrderStatus': false,
                 'hasAlreadyAuthenticatedSuccessfully': false, // a workaround for APIKEY_INVALID
-                'symbolSeparator': '-',
+                'symbolSeparator': '_',
                 // With certain currencies, like
                 // AEON, BTS, GXS, NXT, SBD, STEEM, STR, XEM, XLM, XMR, XRP
                 // an additional tag / memo / payment id is usually required by exchanges.
@@ -145,61 +145,52 @@ module.exports = class kryptono extends Exchange {
     }
 
     async fetchMarkets (params = {}) {
-        // TODO: Use v2GetExchangeInfo as well
-        const response = await this.v2GetMarketPrice (params);
-        //
-        // [
-        //     {
-        //         "symbol": "GTO_BTC",
-        //         "price": "0.00002542",
-        //         "updated_time": 1530682938651
-        //     }
-        // ]
-        //
-        const result = [];
-        // const markets = this.safeValue (response, 'result');
-        for (let i = 0; i < response.length; i++) {
-            const market = response[i];
-            const name = this.safeString (market, 'symbol');
-            const baseId = name.split ('_')[1];
-            const quoteId = name.split ('_')[0];
-            const id = quoteId + this.options['symbolSeparator'] + baseId;
-            // TODO : Clean up this two.
-            const base = this.safeCurrencyCode (baseId);
-            const quote = this.safeCurrencyCode (quoteId);
-            const symbol = base + '/' + quote;
-            // TODO : Create global constant for price precision.
-            const pricePrecision = this.safeInteger (market, 'precision', 8);
-            const precision = {
-                'amount': 8,
-                'price': pricePrecision,
+        const response = await this.v2GetExchangeInfo (params);
+        const symbols = this.safeValue (response, 'symbols');
+        // they mislabeled quotes to base
+        const quotes = this.safeValue (response, 'base_currencies');
+        const minQuotesMap = quotes.reduce ((acc, curr) => {
+            acc[curr.currency_code] = {
+                'min': curr.minimum_total_order,
+                'max': undefined,
             };
-            // const status = this.safeString (market, 'status');
-            const active = true;
-            // (status === 'ONLINE');
-            result.push ({
-                'id': id,
-                'symbol': symbol,
+            return acc;
+        }, {});
+        const base = this.safeValue (response, 'coins');
+        const minBaseMap = base.reduce ((acc, curr) => {
+            acc[curr.currency_code] = {
+                'min': curr.minimum_order_amount,
+                'max': undefined,
+            };
+            return acc;
+        }, {});
+        return symbols.map ((symbolObj) => {
+            const [base, quote] = symbolObj.symbol.split (this.options['symbolSeparator']);
+            return {
+                'id': symbolObj.symbol,
+                'symbol': `${base}/${quote}`,
                 'base': base,
+                'baseId': base,
                 'quote': quote,
-                'baseId': baseId,
-                'quoteId': quoteId,
-                'active': active,
-                'info': market,
-                'precision': precision,
+                'quoteId': quote,
+                'active': symbolObj.allow_trading,
+                'info': symbolObj,
+                'precision': {
+                    'amount': symbolObj.amount_limit_decimal,
+                    'price': symbolObj.price_limit_decimal,
+                },
                 'limits': {
                     'amount': {
-                        'min': this.safeFloat (market, 'minTradeSize'),
+                        'min': minBaseMap[base] ? minBaseMap[base].min : undefined,
                         'max': undefined,
                     },
                     'price': {
-                        'min': Math.pow (10, -precision['price']),
+                        'min': minQuotesMap[quote] ? minQuotesMap[quote].min : undefined,
                         'max': undefined,
                     },
                 },
-            });
-        }
-        return result;
+            };
+        });
     }
 
     async fetchBalance (params = {}) {
@@ -530,9 +521,7 @@ module.exports = class kryptono extends Exchange {
         //
         if ('history' in response) {
             if (response['history'] !== undefined) {
-                const history = response.history.map ((item) => {
-                    return { ...item, 'timestamp': item.time };
-                });
+                const history = response.history.map (item => ({ ...item, 'timestamp': item.time }));
                 return this.parseTrades (history, market, since, limit);
             }
         }
