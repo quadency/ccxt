@@ -55,7 +55,12 @@ module.exports = class kryptono extends Exchange {
                 'api': {
                     'market': 'https://api.kryptono.exchange/v1',
                     'v1': 'https://engine2.kryptono.exchange/api/v1',
-                    'v2': 'https://{hostname}/api/v2/',
+                    'v2': 'https://p.kryptono.exchange/k/api/v2/',
+                },
+                'test': {
+                    'market': 'https://api.kryptono.exchange/v1',
+                    'v1': 'https://engine-test.kryptono.exchange/api/v1',
+                    'v2': 'https://testenv1.kryptono.exchange/k/api/v2/',
                 },
                 'www': 'https://p.kryptono.exchange/k/home',
                 'doc': [
