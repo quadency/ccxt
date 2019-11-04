@@ -3,7 +3,7 @@
 //  ---------------------------------------------------------------------------
 
 const Exchange = require ('./base/Exchange');
-const { BadSymbol, ExchangeError, ExchangeNotAvailable, AuthenticationError, InvalidOrder, InsufficientFunds, OrderNotFound, DDoSProtection, PermissionDenied, AddressPending, OnMaintenance } = require ('./base/errors');
+const { BadSymbol, ExchangeError, AuthenticationError, InvalidOrder, InsufficientFunds, OrderNotFound, PermissionDenied, OnMaintenance } = require ('./base/errors');
 const { TRUNCATE, DECIMAL_PLACES } = require ('./base/functions/number');
 
 //  ---------------------------------------------------------------------------
@@ -23,6 +23,7 @@ module.exports = class kryptono extends Exchange {
                 'fetchMarkets': true,
                 'fetchCurrencies': true,
                 'fetchTradingLimits': false,
+                'fetchFundingLimits': false,
                 'fetchOrder': false,
                 'fetchTickers': true, // TODO : Check with doc for fetchTicker
                 'fetchOrderBook': true,
@@ -79,6 +80,7 @@ module.exports = class kryptono extends Exchange {
                 },
                 'v1': {
                     'get': [
+                        'cs',
                         'dp',
                         'ht',
                     ],
@@ -87,21 +89,49 @@ module.exports = class kryptono extends Exchange {
             'exceptions': {
                 // 'Call to Cancel was throttled. Try again in 60 seconds.': DDoSProtection,
                 // 'Call to GetBalances was throttled. Try again in 60 seconds.': DDoSProtection,
-                'APISIGN_NOT_PROVIDED': AuthenticationError,
-                'INVALID_SIGNATURE': AuthenticationError,
-                'INVALID_CURRENCY': ExchangeError,
-                'INVALID_PERMISSION': AuthenticationError,
-                'INSUFFICIENT_FUNDS': InsufficientFunds,
-                'QUANTITY_NOT_PROVIDED': InvalidOrder,
-                'MIN_TRADE_REQUIREMENT_NOT_MET': InvalidOrder,
-                'ORDER_NOT_OPEN': OrderNotFound,
-                'INVALID_ORDER': InvalidOrder,
-                'UUID_INVALID': OrderNotFound,
-                'RATE_NOT_PROVIDED': InvalidOrder, // createLimitBuyOrder ('ETH/BTC', 1, 0)
-                'WHITELIST_VIOLATION_IP': PermissionDenied,
-                'DUST_TRADE_DISALLOWED_MIN_VALUE': InvalidOrder,
-                'RESTRICTED_MARKET': BadSymbol,
-                'We are down for scheduled maintenance, but we\u2019ll be back up shortly.': OnMaintenance, // {"success":false,"message":"We are down for scheduled maintenance, but we\u2019ll be back up shortly.","result":null,"explanation":null}
+                // 'APISIGN_NOT_PROVIDED': AuthenticationError,
+                // 'INVALID_SIGNATURE': AuthenticationError,
+                // 'INVALID_CURRENCY': ExchangeError,
+                // 'INVALID_PERMISSION': AuthenticationError,
+                // 'INSUFFICIENT_FUNDS': InsufficientFunds,
+                // 'QUANTITY_NOT_PROVIDED': InvalidOrder,
+                // 'MIN_TRADE_REQUIREMENT_NOT_MET': InvalidOrder,
+                // 'ORDER_NOT_OPEN': OrderNotFound,
+                // 'INVALID_ORDER': InvalidOrder,
+                // 'UUID_INVALID': OrderNotFound,
+                // 'RATE_NOT_PROVIDED': InvalidOrder, // createLimitBuyOrder ('ETH/BTC', 1, 0)
+                // 'WHITELIST_VIOLATION_IP': PermissionDenied,
+                // 'DUST_TRADE_DISALLOWED_MIN_VALUE': InvalidOrder,
+                // 'RESTRICTED_MARKET': BadSymbol,
+                // 'We are down for scheduled maintenance, but we\u2019ll be back up shortly.': OnMaintenance, // {"success":false,"message":"We are down for scheduled maintenance, but we\u2019ll be back up shortly.","result":null,"explanation":null}
+            },
+            'options': {
+                'parseOrderStatus': false,
+                'hasAlreadyAuthenticatedSuccessfully': false, // a workaround for APIKEY_INVALID
+                'symbolSeparator': '-',
+                // With certain currencies, like
+                // AEON, BTS, GXS, NXT, SBD, STEEM, STR, XEM, XLM, XMR, XRP
+                // an additional tag / memo / payment id is usually required by exchanges.
+                // With Bittrex some currencies imply the "base address + tag" logic.
+                // The base address for depositing is stored on this.currencies[code]
+                // The base address identifies the exchange as the recipient
+                // while the tag identifies the user account within the exchange
+                // and the tag is retrieved with fetchDepositAddress.
+                'tag': {
+                    'NXT': true, // NXT, BURST
+                    'CRYPTO_NOTE_PAYMENTID': true, // AEON, XMR
+                    'BITSHAREX': true, // BTS
+                    'RIPPLE': true, // XRP
+                    'NEM': true, // XEM
+                    'STELLAR': true, // XLM
+                    'STEEM': true, // SBD, GOLOS
+                    // https://github.com/ccxt/ccxt/issues/4794
+                    // 'LISK': true, // LSK
+                },
+                'subaccountId': undefined,
+                // see the implementation of fetchClosedOrdersV3 below
+                'fetchClosedOrdersMethod': 'fetch_closed_orders_v3',
+                'fetchClosedOrdersFilterBySince': true,
             },
         });
     }
@@ -115,6 +145,7 @@ module.exports = class kryptono extends Exchange {
     }
 
     async fetchMarkets (params = {}) {
+        // TODO: Use v2GetExchangeInfo as well
         const response = await this.v2GetMarketPrice (params);
         //
         // [
@@ -133,16 +164,19 @@ module.exports = class kryptono extends Exchange {
             const baseId = name.split ('_')[1];
             const quoteId = name.split ('_')[0];
             const id = quoteId + this.options['symbolSeparator'] + baseId;
+            // TODO : Clean up this two.
             const base = this.safeCurrencyCode (baseId);
             const quote = this.safeCurrencyCode (quoteId);
             const symbol = base + '/' + quote;
+            // TODO : Create global constant for price precision.
             const pricePrecision = this.safeInteger (market, 'precision', 8);
             const precision = {
                 'amount': 8,
                 'price': pricePrecision,
             };
-            const status = this.safeString (market, 'status');
-            const active = (status === 'ONLINE');
+            // const status = this.safeString (market, 'status');
+            const active = true;
+            // (status === 'ONLINE');
             result.push ({
                 'id': id,
                 'symbol': symbol,
@@ -518,13 +552,14 @@ module.exports = class kryptono extends Exchange {
     }
 
     async fetchOHLCV (symbol, timeframe = '1m', since = undefined, limit = undefined, params = {}) {
+        // https://engine2.kryptono.exchange/api/v1/cs?symbol=BTC_USDT&tt=1m
         await this.loadMarkets ();
         const market = this.market (symbol);
         const request = {
             'tickInterval': this.timeframes[timeframe],
             'marketName': market['id'],
         };
-        const response = await this.v2GetMarketGetTicks (this.extend (request, params));
+        const response = await this.v1GetCs (this.extend (request, params));
         if ('result' in response) {
             if (response['result']) {
                 return this.parseOHLCVs (response['result'], market, timeframe, since, limit);
