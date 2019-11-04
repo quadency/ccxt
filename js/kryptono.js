@@ -55,12 +55,12 @@ module.exports = class kryptono extends Exchange {
                 'api': {
                     'market': 'https://api.kryptono.exchange/v1',
                     'v1': 'https://engine2.kryptono.exchange/api/v1',
-                    'v2': 'https://p.kryptono.exchange/k/api/v2/',
+                    'v2': 'https://p.kryptono.exchange/k/api/v2',
                 },
                 'test': {
                     'market': 'https://api.kryptono.exchange/v1',
                     'v1': 'https://engine-test.kryptono.exchange/api/v1',
-                    'v2': 'https://testenv1.kryptono.exchange/k/api/v2/',
+                    'v2': 'https://testenv1.kryptono.exchange/k/api/v2',
                 },
                 'www': 'https://p.kryptono.exchange/k/home',
                 'doc': [
@@ -76,6 +76,7 @@ module.exports = class kryptono extends Exchange {
                         'exchange-info',
                         'market-price',
                         'account/balances',
+                        'account/details',
                     ],
                 },
                 'market': {
@@ -91,6 +92,7 @@ module.exports = class kryptono extends Exchange {
                     ],
                 },
             },
+            // todo Trading API Information in `https://kryptono.exchange/k/api#developers-guide-api-v2-for-kryptono-exchange-july-13-2018`
             'exceptions': {
                 // 'Call to Cancel was throttled. Try again in 60 seconds.': DDoSProtection,
                 // 'Call to GetBalances was throttled. Try again in 60 seconds.': DDoSProtection,
@@ -568,59 +570,28 @@ module.exports = class kryptono extends Exchange {
         if (api !== 'v2' && api !== 'v3' && api !== 'v3public') {
             url += this.version + '/';
         }
-        if (api === 'public') {
-            url += api + '/' + method.toLowerCase () + path;
-            if (Object.keys (params).length) {
-                url += '?' + this.urlencode (params);
-            }
-        } else if (api === 'v3public') {
-            url += path;
-            if (Object.keys (params).length) {
-                url += '?' + this.urlencode (params);
-            }
-        } else if (api === 'v2') {
-            url += path;
-            if (Object.keys (params).length) {
-                url += '?' + this.urlencode (params);
-            }
-        } else if (api === 'v3') {
-            url += path;
-            if (Object.keys (params).length) {
-                url += '?' + this.rawencode (params);
-            }
-            const contentHash = this.hash (this.encode (''), 'sha512', 'hex');
-            const timestamp = this.milliseconds ().toString ();
-            let auth = timestamp + url + method + contentHash;
-            const subaccountId = this.safeValue (this.options, 'subaccountId');
-            if (subaccountId !== undefined) {
-                auth += subaccountId;
-            }
-            const signature = this.hmac (this.encode (auth), this.encode (this.secret), 'sha512');
-            headers = {
-                'Api-Key': this.apiKey,
-                'Api-Timestamp': timestamp,
-                'Api-Content-Hash': contentHash,
-                'Api-Signature': signature,
-            };
-            if (subaccountId !== undefined) {
-                headers['Api-Subaccount-Id'] = subaccountId;
-            }
-        } else {
+        if (path.includes ('account')) {
             this.checkRequiredCredentials ();
-            url += api + '/';
-            if (((api === 'account') && (path !== 'withdraw')) || (path === 'openorders')) {
-                url += method.toLowerCase ();
-            }
-            const request = {
-                'apikey': this.apiKey,
+            url += path;
+            const query = this.urlencode (this.extend ({
+                'timestamp': this.milliseconds (),
+                'recvWindow': this.options['recvWindow'],
+            }, params));
+            const signature = this.hmac (this.encode (query), this.encode (this.secret));
+            url += '?' + query;
+            headers = {
+                'Authorization': this.apiKey,
+                'Signature': signature,
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/json',
             };
-            const disableNonce = this.safeValue (this.options, 'disableNonce');
-            if ((disableNonce === undefined) || !disableNonce) {
-                request['nonce'] = this.nonce ();
+        } else if (path.includes ('order')) {
+            //  todo we may be able to combine with 'account' part of if statement above if body can be signed similarly
+        } else { // public endpoints
+            url += path;
+            if (Object.keys (params).length) {
+                url += '?' + this.urlencode (params);
             }
-            url += path + '?' + this.urlencode (this.extend (request, params));
-            const signature = this.hmac (this.encode (url), this.encode (this.secret), 'sha512');
-            headers = { 'apisign': signature };
         }
         return { 'url': url, 'method': method, 'body': body, 'headers': headers };
     }
