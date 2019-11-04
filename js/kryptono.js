@@ -30,16 +30,15 @@ module.exports = class kryptono extends Exchange {
                 'fetchTrades': true,
                 'fetchOHLCV': true,
                 'fetchBalance': true,
-                // TODO : Check all of these properties are there or not to make sure.
-                'createMarketOrder': false,
-                'fetchDepositAddress': false, // TODO: Check if it is available again to make sure.
-                'fetchClosedOrders': false,
-                'fetchMyTrades': 'emulated',
-                'fetchOpenOrders': false,
+                'fetchTransactions': false,
                 'withdraw': false,
+                'desposit': false,
                 'fetchDeposits': false,
                 'fetchWithdrawals': false,
-                'fetchTransactions': false,
+                'fetchDepositAddress': false,
+                'fetchOpenOrders': true, // todo /api/v2/order/list/open
+                'fetchClosedOrders': false, // todo api/v2/order/list/completed
+                'fetchMyTrades': 'emulated', // todo /api/v2/order/list/trades
             },
             'timeframes': {
                 // TODO: Check if all of these intervals are supported.
