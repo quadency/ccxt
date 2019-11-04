@@ -203,19 +203,17 @@ module.exports = class kryptono extends Exchange {
     async fetchBalance (params = {}) {
         await this.loadMarkets ();
         const response = await this.v2GetAccountBalances (params);
-        // const balances = this.safeValue (response, 'result');
-        const result = { 'info': response };
-        // const indexed = this.indexBy (balances, 'Currency');
-        // const currencyIds = Object.keys (indexed);
-        for (let i = 0; i < response.length; i++) {
-            // const currencyId = response[i].currency_code;
-            // const code = this.safeCurrencyCode (currencyId);
-            const account = this.account ();
-            // const balance = response[i].total;
-            account['free'] = this.safeFloat (response[i], 'available');
-            account['total'] = this.safeFloat (response[i], 'total');
-            result[response[i].currency_code] = account;
-        }
+        const result = response.reduce (
+            (finalResult, asset) => {
+                finalResult[asset['currency_code']] = {
+                    'free': asset.available,
+                    'used': asset.in_order,
+                    'total': asset.total,
+                };
+                return finalResult;
+            },
+            { 'info': response }
+        );
         return this.parseBalance (result);
     }
 
