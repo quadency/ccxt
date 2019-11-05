@@ -85,6 +85,7 @@ module.exports = class kryptono extends Exchange {
                         'order/trade-detail',
                     ],
                     'post': [
+                        'order/test',
                         'order/details',
                     ],
                 },
@@ -229,6 +230,10 @@ module.exports = class kryptono extends Exchange {
 
     async fetchBalance (params = {}) {
         await this.loadMarkets ();
+        const hasRecvWindow = this.safeValue (params, 'recvWindow');
+        if (!hasRecvWindow) {
+            params['recvWindow'] = 5000;
+        }
         const response = await this.v2GetAccountBalances (params);
         const result = { 'info': response };
         for (let i = 0; i < response.length; i++) {
@@ -241,19 +246,72 @@ module.exports = class kryptono extends Exchange {
         return this.parseBalance (result);
     }
 
+    parseOrderStatus (status) {
+        const statuses = {
+            'open': 'open',
+            'partial_fill': 'open',
+            'filled': 'closed',
+            'canceled': 'canceled',
+            'canceling': 'open',
+        };
+        return this.safeString (statuses, status, status);
+    }
+
+    parseOrder (order, market = undefined) {
+        console.log ('order raw', order);
+        const timestamp = this.safeString (order, 'createTime');
+        let symbol = undefined;
+        const marketId = this.safeString (order, 'order_symbol');
+        if (marketId !== undefined) {
+            if (marketId in this.markets_by_id) {
+                market = this.markets_by_id[marketId];
+                symbol = market['symbol'];
+            } else {
+                const [ baseId, quoteId ] = marketId.split (this.options['symbolSeparator']);
+                symbol = baseId + '/' + quoteId;
+            }
+        }
+        const amount = this.safeFloat (order, 'order_size');
+        const filled = this.safeFloat (order, 'executed');
+        let remaining = undefined;
+        if (amount !== undefined) {
+            if (filled !== undefined) {
+                remaining = amount - filled;
+            }
+        }
+        return {
+            'id': this.safeString (order, 'order_id'),
+            'info': order,
+            'timestamp': timestamp,
+            'datetime': this.iso8601 (timestamp),
+            'lastTradeTimestamp': undefined,
+            'status': this.parseOrderStatus (this.safeString (order, 'status')),
+            'symbol': symbol,
+            'type': this.safeString (order, 'type'),
+            'side': (this.safeString (order, 'order_side')).toLowerCase (),
+            'price': this.safeFloat (order, 'order_price'),
+            'cost': this.safeFloat (order, 'avg'),
+            'amount': amount,
+            'filled': filled,
+            'remaining': remaining,
+            'fee': undefined,
+        };
+    }
+
     async fetchOrder (id, symbol = undefined, params = {}) {
-        // WIP
+        await this.loadMarkets ();
         const request = {
             'order_id': id,
             'timestamp': this.milliseconds (),
         };
-        const recvWindowObject = this.safeValue (this.options, 'recvWindow');
+        const recvWindowParam = this.safeValue (params, 'recvWindow');
         let recvWindow = 5000;
-        if (recvWindowObject) {
-            recvWindow = recvWindowObject;
+        if (recvWindowParam) {
+            recvWindow = recvWindowParam;
         }
         request['recvWindow'] = recvWindow;
-        await this.v2PostOrderDetails (this.extend (request, params));
+        const response = await this.v2PostOrderDetails (this.extend (request, params));
+        return this.parseOrder (response);
     }
 
     async fetchOrderBook (symbol, limit = undefined, params = {}) {
@@ -567,11 +625,7 @@ module.exports = class kryptono extends Exchange {
         if (route === 'account') {
             this.checkRequiredCredentials ();
             url += path;
-            const hasRecvWindow = this.safeValue (this.options, 'recvWindow');
-            let recvWindow = 5000;
-            if (hasRecvWindow) {
-                recvWindow = hasRecvWindow;
-            }
+            const recvWindow = this.safeValue (params, 'recvWindow');
             const query = this.urlencode (this.extend ({
                 'timestamp': this.milliseconds (),
                 'recvWindow': recvWindow,
@@ -586,6 +640,17 @@ module.exports = class kryptono extends Exchange {
             };
         } else if (route === 'order') {
             this.checkRequiredCredentials ();
+            url += path;
+            if (method !== 'GET') {
+                body = this.json (params);
+            }
+            const signature = this.hmac (this.encode (this.json (params)), this.encode (this.secret));
+            headers = {
+                'Authorization': this.apiKey,
+                'Signature': signature,
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/json',
+            };
         } else { // public endpoints
             url += path;
             if (Object.keys (params).length) {
