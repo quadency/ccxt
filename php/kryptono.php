@@ -219,19 +219,16 @@ class kryptono extends Exchange {
 
     public function fetch_balance ($params = array ()) {
         $this->load_markets();
-        // $response = $this->v2GetAccountBalances ($params);
-        // $result = $response->reduce (
-        //     (finalResult, asset) => {
-        //         finalResult[asset['currency_code']] = array (
-        //             'free' => asset.available,
-        //             'used' => asset.in_order,
-        //             'total' => asset.total,
-        //         );
-        //         return finalResult;
-        //     },
-        //     array( 'info' => $response )
-        // );
-        // return $this->parse_balance($result);
+        $response = $this->v2GetAccountBalances ($params);
+        $result = array( 'info' => $response );
+        for ($i = 0; $i < count ($response); $i++) {
+            $result[$response[$i]['currency_code']] = array (
+                'free' => $response[$i]['available'],
+                'used' => $response[$i]['in_order'],
+                'total' => $response[$i]['total'],
+            );
+        }
+        return $this->parse_balance($result);
     }
 
     public function fetch_order ($id, $symbol = null, $params = array ()) {
@@ -512,13 +509,18 @@ class kryptono extends Exchange {
         if ($api !== 'v2' && $api !== 'v3' && $api !== 'v3public') {
             $url .= $this->version . '/';
         }
-        list($route) = explode('/', $path);
+        $route = explode('/', $path)[0];
         if ($route === 'account') {
             $this->check_required_credentials();
             $url .= $path;
+            $hasRecvWindow = $this->safe_value($this->options, 'recvWindow');
+            $recvWindow = 5000;
+            if ($hasRecvWindow) {
+                $recvWindow = $hasRecvWindow;
+            }
             $query = $this->urlencode (array_merge (array (
                 'timestamp' => $this->milliseconds (),
-                'recvWindow' => $this->options['recvWindow'],
+                'recvWindow' => $recvWindow,
             ), $params));
             $signature = $this->hmac ($this->encode ($query), $this->encode ($this->secret));
             $url .= '?' . $query;

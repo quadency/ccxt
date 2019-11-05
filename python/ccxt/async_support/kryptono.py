@@ -173,19 +173,25 @@ class kryptono (Exchange):
         minQuotesMap = {}
         for i in range(0, len(quotes)):
             minQuotesMap[quotes[i]['currency_code']] = {
-                'min': quotes[i]['minimum_total_order'],
-                'max': None,
+                'min': float(quotes[i]['minimum_total_order']),
             }
         base = self.safe_value(response, 'coins')
         minBaseMap = {}
         for i in range(0, len(base)):
             minBaseMap[base[i]['currency_code']] = {
-                'min': base[i]['minimum_order_amount'],
-                'max': None,
+                'min': float(base[i]['minimum_order_amount']),
             }
         result = []
         for i in range(0, len(symbols)):
             [base, quote] = symbols[i]['symbol'].split(self.options['symbolSeparator'])
+            hasLimitMin = self.safe_value(minBaseMap, base)
+            limitAmountMin = 0
+            if hasLimitMin:
+                limitAmountMin = hasLimitMin['min']
+            hasPriceMin = self.safe_value(minQuotesMap, quote)
+            priceAmountMin = 0
+            if hasPriceMin:
+                priceAmountMin = hasPriceMin['min']
             result.append({
                 'id': symbols[i]['symbol'],
                 'symbol': base + '/' + quote,
@@ -201,11 +207,11 @@ class kryptono (Exchange):
                 },
                 'limits': {
                     'amount': {
-                        'min': minBaseMap[base].min if minBaseMap[base] else None,
+                        'min': limitAmountMin,
                         'max': None,
                     },
                     'price': {
-                        'min': minQuotesMap[quote].min if minQuotesMap[quote] else None,
+                        'min': priceAmountMin,
                         'max': None,
                     },
                 },
@@ -215,17 +221,13 @@ class kryptono (Exchange):
     async def fetch_balance(self, params={}):
         await self.load_markets()
         response = await self.v2GetAccountBalances(params)
-        result = response.reduce(
-            (finalResult, asset) => {
-                finalResult[asset['currency_code']] = {
-                    'free': asset.available,
-                    'used': asset.in_order,
-                    'total': asset.total,
-                }
-                return finalResult
-            },
-            {'info': response}
-        )
+        result = {'info': response}
+        for i in range(0, len(response)):
+            result[response[i]['currency_code']] = {
+                'free': response[i]['available'],
+                'used': response[i]['in_order'],
+                'total': response[i]['total'],
+            }
         return self.parse_balance(result)
 
     async def fetch_order(self, id, symbol=None, params={}):
@@ -428,7 +430,7 @@ class kryptono (Exchange):
         return self.parse_ticker(ticker, market)
 
     async def fetch_trades(self, symbol, since=None, limit=None, params={}):
-        # await self.load_markets()
+        await self.load_markets()
         # market = self.market(symbol)
         # request = {
         #     'symbol': symbol,
@@ -488,12 +490,17 @@ class kryptono (Exchange):
         }) + '/'
         if api != 'v2' and api != 'v3' and api != 'v3public':
             url += self.version + '/'
-        if path.includes('account'):
+        route = path.split('/')[0]
+        if route == 'account':
             self.check_required_credentials()
             url += path
+            hasRecvWindow = self.safe_value(self.options, 'recvWindow')
+            recvWindow = 5000
+            if hasRecvWindow:
+                recvWindow = hasRecvWindow
             query = self.urlencode(self.extend({
                 'timestamp': self.milliseconds(),
-                'recvWindow': self.options['recvWindow'],
+                'recvWindow': recvWindow,
             }, params))
             signature = self.hmac(self.encode(query), self.encode(self.secret))
             url += '?' + query
@@ -503,7 +510,8 @@ class kryptono (Exchange):
                 'X-Requested-With': 'XMLHttpRequest',
                 'Content-Type': 'application/json',
             }
-        elif path.includes('order'):
+        elif route == 'order':
+            self.check_required_credentials()
             #  todo we may be able to combine with 'account' part of if statement above if body can be signed similarly
         else:  # public endpoints
             url += path

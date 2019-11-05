@@ -451,7 +451,11 @@ class Exchange(object):
             self.throttle()
         self.lastRestRequestTimestamp = self.milliseconds()
         request = self.sign(path, api, method, params, headers, body)
-        return self.fetch(request['url'], request['method'], request['headers'], request['body'])
+
+        print("signgngng", request)
+
+        getIt = self.fetch(request['url'], request['method'], request['headers'], request['body'])
+        return getIt
 
     def request(self, path, api='public', method='GET', params={}, headers=None, body=None):
         """Exchange.request is the entry point for all generated methods"""

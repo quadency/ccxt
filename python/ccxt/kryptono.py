@@ -220,19 +220,15 @@ class kryptono (Exchange):
 
     def fetch_balance(self, params={}):
         self.load_markets()
-        # response = self.v2GetAccountBalances(params)
-        # result = response.reduce(
-        #     (finalResult, asset) => {
-        #         finalResult[asset['currency_code']] = {
-        #             'free': asset.available,
-        #             'used': asset.in_order,
-        #             'total': asset.total,
-        #         }
-        #         return finalResult
-        #     },
-        #     {'info': response}
-        # )
-        # return self.parse_balance(result)
+        response = self.v2GetAccountBalances(params)
+        result = {'info': response}
+        for i in range(0, len(response)):
+            result[response[i]['currency_code']] = {
+                'free': response[i]['available'],
+                'used': response[i]['in_order'],
+                'total': response[i]['total'],
+            }
+        return self.parse_balance(result)
 
     def fetch_order(self, id, symbol=None, params={}):
         request = {
@@ -494,13 +490,17 @@ class kryptono (Exchange):
         }) + '/'
         if api != 'v2' and api != 'v3' and api != 'v3public':
             url += self.version + '/'
-        route = path.split('/')
+        route = path.split('/')[0]
         if route == 'account':
             self.check_required_credentials()
             url += path
+            hasRecvWindow = self.safe_value(self.options, 'recvWindow')
+            recvWindow = 5000
+            if hasRecvWindow:
+                recvWindow = hasRecvWindow
             query = self.urlencode(self.extend({
                 'timestamp': self.milliseconds(),
-                'recvWindow': self.options['recvWindow'],
+                'recvWindow': recvWindow,
             }, params))
             signature = self.hmac(self.encode(query), self.encode(self.secret))
             url += '?' + query
