@@ -166,21 +166,29 @@ module.exports = class kryptono extends Exchange {
         const minQuotesMap = {};
         for (let i = 0; i < quotes.length; i++) {
             minQuotesMap[quotes[i]['currency_code']] = {
-                'min': quotes[i]['minimum_total_order'],
-                'max': undefined,
+                'min': parseFloat (quotes[i]['minimum_total_order']),
             };
         }
         const base = this.safeValue (response, 'coins');
         const minBaseMap = {};
         for (let i = 0; i < base.length; i++) {
             minBaseMap[base[i]['currency_code']] = {
-                'min': base[i]['minimum_order_amount'],
-                'max': undefined,
+                'min': parseFloat (base[i]['minimum_order_amount']),
             };
         }
         const result = [];
         for (let i = 0; i < symbols.length; i++) {
             const [base, quote] = symbols[i]['symbol'].split (this.options['symbolSeparator']);
+            const hasLimitMin = this.safeValue (minBaseMap, base);
+            let limitAmountMin = 0;
+            if (hasLimitMin) {
+                limitAmountMin = hasLimitMin['min'];
+            }
+            const hasPriceMin = this.safeValue (minQuotesMap, quote);
+            let priceAmountMin = 0;
+            if (hasPriceMin) {
+                priceAmountMin = hasPriceMin['min'];
+            }
             result.push ({
                 'id': symbols[i]['symbol'],
                 'symbol': base + '/' + quote,
@@ -196,11 +204,11 @@ module.exports = class kryptono extends Exchange {
                 },
                 'limits': {
                     'amount': {
-                        'min': minBaseMap[base] ? minBaseMap[base].min : undefined,
+                        'min': limitAmountMin,
                         'max': undefined,
                     },
                     'price': {
-                        'min': minQuotesMap[quote] ? minQuotesMap[quote].min : undefined,
+                        'min': priceAmountMin,
                         'max': undefined,
                     },
                 },
@@ -211,19 +219,19 @@ module.exports = class kryptono extends Exchange {
 
     async fetchBalance (params = {}) {
         await this.loadMarkets ();
-        const response = await this.v2GetAccountBalances (params);
-        const result = response.reduce (
-            (finalResult, asset) => {
-                finalResult[asset['currency_code']] = {
-                    'free': asset.available,
-                    'used': asset.in_order,
-                    'total': asset.total,
-                };
-                return finalResult;
-            },
-            { 'info': response }
-        );
-        return this.parseBalance (result);
+        // const response = await this.v2GetAccountBalances (params);
+        // const result = response.reduce (
+        //     (finalResult, asset) => {
+        //         finalResult[asset['currency_code']] = {
+        //             'free': asset.available,
+        //             'used': asset.in_order,
+        //             'total': asset.total,
+        //         };
+        //         return finalResult;
+        //     },
+        //     { 'info': response }
+        // );
+        // return this.parseBalance (result);
     }
 
     async fetchOrder (id, symbol = undefined, params = {}) {
@@ -438,7 +446,7 @@ module.exports = class kryptono extends Exchange {
     }
 
     async fetchTrades (symbol, since = undefined, limit = undefined, params = {}) {
-        // await this.loadMarkets ();
+        await this.loadMarkets ();
         // const market = this.market (symbol);
         // const request = {
         //     'symbol': symbol,
@@ -504,7 +512,8 @@ module.exports = class kryptono extends Exchange {
         if (api !== 'v2' && api !== 'v3' && api !== 'v3public') {
             url += this.version + '/';
         }
-        if (path.includes ('account')) {
+        const [ route ] = path.split ('/');
+        if (route === 'account') {
             this.checkRequiredCredentials ();
             url += path;
             const query = this.urlencode (this.extend ({
@@ -519,7 +528,8 @@ module.exports = class kryptono extends Exchange {
                 'X-Requested-With': 'XMLHttpRequest',
                 'Content-Type': 'application/json',
             };
-        } else if (path.includes ('order')) {
+        } else if (route === 'order') {
+            this.checkRequiredCredentials ();
             //  todo we may be able to combine with 'account' part of if statement above if body can be signed similarly
         } else { // public endpoints
             url += path;

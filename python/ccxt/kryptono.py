@@ -4,25 +4,14 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.base.exchange import Exchange
-
-# -----------------------------------------------------------------------------
-
-try:
-    basestring  # Python 3
-except NameError:
-    basestring = str  # Python 2
-import hashlib
-import math
 from ccxt.base.errors import ExchangeError
 from ccxt.base.errors import AuthenticationError
 from ccxt.base.errors import PermissionDenied
 from ccxt.base.errors import BadSymbol
 from ccxt.base.errors import InsufficientFunds
-from ccxt.base.errors import AddressPending
 from ccxt.base.errors import InvalidOrder
 from ccxt.base.errors import OrderNotFound
 from ccxt.base.errors import DDoSProtection
-from ccxt.base.errors import ExchangeNotAvailable
 from ccxt.base.errors import OnMaintenance
 from ccxt.base.decimal_to_precision import TRUNCATE
 from ccxt.base.decimal_to_precision import DECIMAL_PLACES
@@ -37,28 +26,30 @@ class kryptono (Exchange):
             'countries': ['SG'],
             'version': 'v2',
             'rateLimit': 1000,  # TODO: Check if self is the corrrect as per CCXT requirments. Kryptono gives 1000 minute intervals.
-            'certified': True,
+            'certified': True,  # TODO: Verify with Tony.
             # new metainfo interface
             'has': {
-                # TODO : Check all of these properties are there or not to make sure.
                 'CORS': True,
                 'fetchMarkets': True,
                 'fetchCurrencies': True,
                 'fetchTradingLimits': False,
-                'fetchOrder': False,
+                'fetchFundingLimits': False,
                 'fetchTickers': True,  # TODO : Check with doc for fetchTicker
                 'fetchOrderBook': True,
                 'fetchTrades': True,
                 'fetchOHLCV': True,
-                'createMarketOrder': False,
-                'fetchDepositAddress': False,  # TODO: Check if it is available again to make sure.
-                'fetchClosedOrders': False,
-                'fetchMyTrades': 'emulated',
-                'fetchOpenOrders': False,
+                'fetchBalance': True,
+                'fetchTransactions': False,
                 'withdraw': False,
+                'desposit': False,
                 'fetchDeposits': False,
                 'fetchWithdrawals': False,
-                'fetchTransactions': False,
+                'fetchDepositAddress': False,
+                'fetchOrder': True,  # todo /api/v2/order/details
+                'fetchOrders': True,  # todo  /api/v2/order/list/completed
+                'fetchOpenOrders': True,  # todo /api/v2/order/list/open
+                'fetchClosedOrders': False,  # todo api/v2/order/list/completed
+                'fetchMyTrades': 'emulated',  # todo /api/v2/order/list/trades
             },
             'timeframes': {
                 # TODO: Check if all of these intervals are supported.
@@ -72,18 +63,21 @@ class kryptono (Exchange):
             'urls': {
                 'logo': 'https://storage.googleapis.com/kryptono-exchange/frontend/Kryptono%20Exchange.svg',
                 'api': {
-                    # 'public': 'https://{hostname}/api',
-                    # 'account': 'https://{hostname}/api',
                     'market': 'https://api.kryptono.exchange/v1',
                     'v1': 'https://engine2.kryptono.exchange/api/v1',
-                    'v2': 'https://{hostname}/api/v2/',
+                    'v2': 'https://p.kryptono.exchange/k/api/v2',
+                },
+                'test': {
+                    'market': 'https://api.kryptono.exchange/v1',
+                    'v1': 'https://engine-test.kryptono.exchange/api/v1',
+                    'v2': 'https://testenv1.kryptono.exchange/k/api/v2',
                 },
                 'www': 'https://p.kryptono.exchange/k/home',
                 'doc': [
-                    'https://p.kryptono.exchange/k/api'
+                    'https://p.kryptono.exchange/k/api',
                 ],
                 'fees': [
-                    'https://kryptono.zendesk.com/hc/en-us/articles/360004347772-2-Fee-on-Kryptono-Exchange-'
+                    'https://kryptono.zendesk.com/hc/en-us/articles/360004347772-2-Fee-on-Kryptono-Exchange-',
                 ],
             },
             'api': {
@@ -91,6 +85,15 @@ class kryptono (Exchange):
                     'get': [
                         'exchange-info',
                         'market-price',
+                        # these endpoints require self.apiKey + self.secret
+                        'account/balances',
+                        'account/details',
+                        'order/details',
+                        'order/list/all',
+                        'order/list/open',
+                        'order/list/completed',
+                        'order/list/trades',
+                        'order/trade-detail',
                     ],
                 },
                 'market': {
@@ -100,61 +103,60 @@ class kryptono (Exchange):
                 },
                 'v1': {
                     'get': [
+                        'cs',
                         'dp',
                         'ht',
                     ],
                 },
             },
+            # todo Trading API Information in `https://kryptono.exchange/k/api#developers-guide-api-v2-for-kryptono-exchange-july-13-2018`
             'exceptions': {
                 # 'Call to Cancel was throttled. Try again in 60 seconds.': DDoSProtection,
                 # 'Call to GetBalances was throttled. Try again in 60 seconds.': DDoSProtection,
-                'APISIGN_NOT_PROVIDED': AuthenticationError,
-                'INVALID_SIGNATURE': AuthenticationError,
-                'INVALID_CURRENCY': ExchangeError,
-                'INVALID_PERMISSION': AuthenticationError,
-                'INSUFFICIENT_FUNDS': InsufficientFunds,
-                'QUANTITY_NOT_PROVIDED': InvalidOrder,
-                'MIN_TRADE_REQUIREMENT_NOT_MET': InvalidOrder,
-                'ORDER_NOT_OPEN': OrderNotFound,
-                'INVALID_ORDER': InvalidOrder,
-                'UUID_INVALID': OrderNotFound,
-                'RATE_NOT_PROVIDED': InvalidOrder,  # createLimitBuyOrder('ETH/BTC', 1, 0)
-                'WHITELIST_VIOLATION_IP': PermissionDenied,
-                'DUST_TRADE_DISALLOWED_MIN_VALUE': InvalidOrder,
-                'RESTRICTED_MARKET': BadSymbol,
-                'We are down for scheduled maintenance, but we\u2019ll be back up shortly.': OnMaintenance,  # {"success":false,"message":"We are down for scheduled maintenance, but we\u2019ll be back up shortly.","result":null,"explanation":null}
-            # 'options': {
-            #     'parseOrderStatus': False,
-            #     'hasAlreadyAuthenticatedSuccessfully': False,  # a workaround for APIKEY_INVALID
-            #     'symbolSeparator': '-',
-            #     # With certain currencies, like
-            #     # AEON, BTS, GXS, NXT, SBD, STEEM, STR, XEM, XLM, XMR, XRP
-            #     # an additional tag / memo / payment id is usually required by exchanges.
-            #     # With Bittrex some currencies imply the "base address + tag" logic.
-            #     # The base address for depositing is stored on self.currencies[code]
-            #     # The base address identifies the exchange as the recipient
-            #     # while the tag identifies the user account within the exchange
-            #     # and the tag is retrieved with fetchDepositAddress.
-            #     'tag': {
-            #         'NXT': True,  # NXT, BURST
-            #         'CRYPTO_NOTE_PAYMENTID': True,  # AEON, XMR
-            #         'BITSHAREX': True,  # BTS
-            #         'RIPPLE': True,  # XRP
-            #         'NEM': True,  # XEM
-            #         'STELLAR': True,  # XLM
-            #         'STEEM': True,  # SBD, GOLOS
-            #         # https://github.com/ccxt/ccxt/issues/4794
-            #         # 'LISK': True,  # LSK
-            #     },
-            #     # 'subaccountId': None,
-            #     #  # see the implementation of fetchClosedOrdersV3 below
-            #     # 'fetchClosedOrdersMethod': 'fetch_closed_orders_v3',
-            #     # 'fetchClosedOrdersFilterBySince': True,
-            #},
-            # 'commonCurrencies': {
-            #     'BITS': 'SWIFT',
-            #     'CPC': 'Capricoin',
-            #}
+                # 'APISIGN_NOT_PROVIDED': AuthenticationError,
+                # 'INVALID_SIGNATURE': AuthenticationError,
+                # 'INVALID_CURRENCY': ExchangeError,
+                # 'INVALID_PERMISSION': AuthenticationError,
+                # 'INSUFFICIENT_FUNDS': InsufficientFunds,
+                # 'QUANTITY_NOT_PROVIDED': InvalidOrder,
+                # 'MIN_TRADE_REQUIREMENT_NOT_MET': InvalidOrder,
+                # 'ORDER_NOT_OPEN': OrderNotFound,
+                # 'INVALID_ORDER': InvalidOrder,
+                # 'UUID_INVALID': OrderNotFound,
+                # 'RATE_NOT_PROVIDED': InvalidOrder,  # createLimitBuyOrder('ETH/BTC', 1, 0)
+                # 'WHITELIST_VIOLATION_IP': PermissionDenied,
+                # 'DUST_TRADE_DISALLOWED_MIN_VALUE': InvalidOrder,
+                # 'RESTRICTED_MARKET': BadSymbol,
+                # 'We are down for scheduled maintenance, but we\u2019ll be back up shortly.': OnMaintenance,  # {"success":false,"message":"We are down for scheduled maintenance, but we\u2019ll be back up shortly.","result":null,"explanation":null}
+            },
+            'options': {
+                'parseOrderStatus': False,
+                'hasAlreadyAuthenticatedSuccessfully': False,  # a workaround for APIKEY_INVALID
+                'symbolSeparator': '_',
+                # With certain currencies, like
+                # AEON, BTS, GXS, NXT, SBD, STEEM, STR, XEM, XLM, XMR, XRP
+                # an additional tag / memo / payment id is usually required by exchanges.
+                # With Bittrex some currencies imply the "base address + tag" logic.
+                # The base address for depositing is stored on self.currencies[code]
+                # The base address identifies the exchange as the recipient
+                # while the tag identifies the user account within the exchange
+                # and the tag is retrieved with fetchDepositAddress.
+                'tag': {
+                    'NXT': True,  # NXT, BURST
+                    'CRYPTO_NOTE_PAYMENTID': True,  # AEON, XMR
+                    'BITSHAREX': True,  # BTS
+                    'RIPPLE': True,  # XRP
+                    'NEM': True,  # XEM
+                    'STELLAR': True,  # XLM
+                    'STEEM': True,  # SBD, GOLOS
+                    # https://github.com/ccxt/ccxt/issues/4794
+                    # 'LISK': True,  # LSK
+                },
+                'subaccountId': None,
+                # see the implementation of fetchClosedOrdersV3 below
+                'fetchClosedOrdersMethod': 'fetch_closed_orders_v3',
+                'fetchClosedOrdersFilterBySince': True,
+            },
         })
 
     def cost_to_precision(self, symbol, cost):
@@ -164,65 +166,52 @@ class kryptono (Exchange):
         return self.decimal_to_precision(fee, TRUNCATE, self.markets[symbol]['precision']['price'], DECIMAL_PLACES)
 
     def fetch_markets(self, params={}):
-        response = self.v2GetMarketPrice(params)
-        #
-        #     [
-        #         {
-        #             "symbol":"LTC-BTC",
-        #             "baseCurrencySymbol":"LTC",
-        #             "quoteCurrencySymbol":"BTC",
-        #             "minTradeSize":"0.01686767",
-        #             "precision":8,
-        #             "status":"ONLINE",  # "OFFLINE"
-        #             "createdAt":"2014-02-13T00:00:00Z"
-        #         },
-        #         {
-        #             "symbol":"VDX-USDT",
-        #             "baseCurrencySymbol":"VDX",
-        #             "quoteCurrencySymbol":"USDT",
-        #             "minTradeSize":"300.00000000",
-        #             "precision":8,
-        #             "status":"ONLINE",  # "OFFLINE"
-        #             "createdAt":"2019-05-23T00:41:21.843Z",
-        #             "notice":"USDT has swapped to an ERC20-based token as of August 5, 2019."
-        #         }
-        #     ]
-        #
-        result = []
-        # markets = self.safe_value(response, 'result')
-        for i in range(0, len(response)):
-            market = response[i]
-            name = self.safe_string(market, 'symbol')
-            baseId = name.split('_')[1]
-            quoteId = name.split('_')[0]
-            id = quoteId + self.options['symbolSeparator'] + baseId
-            base = self.safe_currency_code(baseId)
-            quote = self.safe_currency_code(quoteId)
-            symbol = base + '/' + quote
-            pricePrecision = self.safe_integer(market, 'precision', 8)
-            precision = {
-                'amount': 8,
-                'price': pricePrecision,
+        response = self.v2GetExchangeInfo(params)
+        symbols = self.safe_value(response, 'symbols')
+        # they mislabeled quotes to base
+        quotes = self.safe_value(response, 'base_currencies')
+        minQuotesMap = {}
+        for i in range(0, len(quotes)):
+            minQuotesMap[quotes[i]['currency_code']] = {
+                'min': float(quotes[i]['minimum_total_order']),
             }
-            status = self.safe_string(market, 'status')
-            active = (status == 'ONLINE')
+        base = self.safe_value(response, 'coins')
+        minBaseMap = {}
+        for i in range(0, len(base)):
+            minBaseMap[base[i]['currency_code']] = {
+                'min': float(base[i]['minimum_order_amount']),
+            }
+        result = []
+        for i in range(0, len(symbols)):
+            [base, quote] = symbols[i]['symbol'].split(self.options['symbolSeparator'])
+            hasLimitMin = self.safe_value(minBaseMap, base)
+            limitAmountMin = 0
+            if hasLimitMin:
+                limitAmountMin = hasLimitMin['min']
+            hasPriceMin = self.safe_value(minQuotesMap, quote)
+            priceAmountMin = 0
+            if hasPriceMin:
+                priceAmountMin = hasPriceMin['min']
             result.append({
-                'id': id,
-                'symbol': symbol,
+                'id': symbols[i]['symbol'],
+                'symbol': base + '/' + quote,
                 'base': base,
+                'baseId': base,
                 'quote': quote,
-                'baseId': baseId,
-                'quoteId': quoteId,
-                'active': active,
-                'info': market,
-                'precision': precision,
+                'quoteId': quote,
+                'active': symbols[i]['allow_trading'],
+                'info': symbols[i],
+                'precision': {
+                    'amount': symbols[i]['amount_limit_decimal'],
+                    'price': symbols[i]['price_limit_decimal'],
+                },
                 'limits': {
                     'amount': {
-                        'min': self.safe_float(market, 'minTradeSize'),
+                        'min': limitAmountMin,
                         'max': None,
                     },
                     'price': {
-                        'min': math.pow(10, -precision['price']),
+                        'min': priceAmountMin,
                         'max': None,
                     },
                 },
@@ -230,22 +219,27 @@ class kryptono (Exchange):
         return result
 
     def fetch_balance(self, params={}):
-    #     self.load_markets()
-    #     response = self.accountGetBalances(params)
-    #     balances = self.safe_value(response, 'result')
-    #     result = {'info': balances}
-    #     indexed = self.index_by(balances, 'Currency')
-    #     currencyIds = list(indexed.keys())
-    #     for i in range(0, len(currencyIds)):
-    #         currencyId = currencyIds[i]
-    #         code = self.safe_currency_code(currencyId)
-    #         account = self.account()
-    #         balance = indexed[currencyId]
-    #         account['free'] = self.safe_float(balance, 'Available')
-    #         account['total'] = self.safe_float(balance, 'Balance')
-    #         result[code] = account
-    #     }
-    #     return self.parse_balance(result)
+        self.load_markets()
+        # response = self.v2GetAccountBalances(params)
+        # result = response.reduce(
+        #     (finalResult, asset) => {
+        #         finalResult[asset['currency_code']] = {
+        #             'free': asset.available,
+        #             'used': asset.in_order,
+        #             'total': asset.total,
+        #         }
+        #         return finalResult
+        #     },
+        #     {'info': response}
+        # )
+        # return self.parse_balance(result)
+
+    def fetch_order(self, id, symbol=None, params={}):
+        request = {
+            'order_id': id,
+            'timestamp': self.milliseconds(),
+        }
+        request.recvWindow = params.recvWindow if params.recvWindow else 5000
 
     def fetch_order_book(self, symbol, limit=None, params={}):
         self.load_markets()
@@ -253,104 +247,41 @@ class kryptono (Exchange):
             'symbol': symbol,
         }
         response = self.v1GetDp(self.extend(request, params))
-        # orderbook = response
-        # if 'type' in params:
-        #     if params['type'] == 'buy':
-        #         orderbook = {
-        #             'buy': response['result'],
-        #             'sell': [],
-        #         }
-        #     elif params['type'] == 'sell':
-        #         orderbook = {
-        #             'buy': [],
-        #             'sell': response['result'],
-        #         }
-        #     }
-        #}
+        #
+        # {
+        #     "symbol" : "KNOW_BTC",
+        #     "limit" : 100,
+        #     "asks" : [
+        #       [
+        #         "0.00001850",   # price
+        #         "69.00000000"   # size
+        #       ]
+        #     ],
+        #     "bids" : [
+        #       [
+        #         "0.00001651",       # price
+        #         "11186.00000000"    # size
+        #       ]
+        #     ]
+        #     "time" : 1529298130192
+        #   }
+        #
         return self.parse_order_book(response, response.time)
-
-    def fetch_currencies(self, params={}):
-        response = self.v2GetExchangeInfo(params)
-        #
-        #     {
-        #         "success": True,
-        #         "message": "",
-        #         "result": [
-        #             {
-        #                 "Currency": "BTC",
-        #                 "CurrencyLong":"Bitcoin",
-        #                 "MinConfirmation":2,
-        #                 "TxFee":0.00050000,
-        #                 "IsActive":true,
-        #                 "IsRestricted":false,
-        #                 "CoinType":"BITCOIN",
-        #                 "BaseAddress":"1N52wHoVR79PMDishab2XmRHsbekCdGquK",
-        #                 "Notice":null
-        #             },
-        #             ...,
-        #         ]
-        #     }
-        #
-        currencies = self.safe_value(response, 'coins', [])
-        result = {}
-        for i in range(0, len(currencies)):
-            currency = currencies[i]
-            id = self.safe_string(currency, 'currency_code')
-            # todo: will need to rethink the fees
-            # to add support for multiple withdrawal/deposit methods and
-            # differentiated fees for each particular method
-            code = self.safe_currency_code(id)
-            precision = 8  # default precision, todo: fix "magic constants"
-            # address = self.safe_value(currency, 'BaseAddress')
-            fee = self.safe_float(currency, 'TxFee')  # todo: redesign
-            result[code] = {
-                'id': id,
-                'code': code,
-                'address': 'TODO',
-                'info': currency,
-                'type': 'TODO',
-                'name': currency.name,
-                'active': True,  # TODO
-                'fee': 'TODO',
-                'precision': precision,
-                'limits': {
-                    'amount': {
-                        'min': math.pow(10, -precision),
-                        'max': None,
-                    },
-                    'price': {
-                        'min': math.pow(10, -precision),
-                        'max': None,
-                    },
-                    'cost': {
-                        'min': None,
-                        'max': None,
-                    },
-                    'withdraw': {
-                        'min': fee,
-                        'max': None,
-                    },
-                },
-            }
-        return result
 
     def parse_ticker(self, ticker, market=None):
         #
         #     {
-        #         "MarketName":"BTC-ETH",
-        #         "High":0.02127099,
-        #         "Low":0.02035064,
-        #         "Volume":10288.40271571,
-        #         "Last":0.02070510,
-        #         "BaseVolume":214.64663206,
-        #         "TimeStamp":"2019-09-18T21:03:59.897",
-        #         "Bid":0.02070509,
-        #         "Ask":0.02070510,
-        #         "OpenBuyOrders":1228,
-        #         "OpenSellOrders":5899,
-        #         "PrevDay":0.02082823,
-        #         "Created":"2015-08-14T09:02:24.817"
-        #     }
+        #         "MarketName":"KNOW-BTC",
+        #         "High":0.00001313,
+        #         "Low":0.0000121,
+        #         "BaseVolume":24.06681016,
+        #         "Last":0.00001253,
+        #         "TimeStamp":"2018-07-10T07:44:56.936Z",
+        #         "Volume":1920735.0486831602,
+        #         "Bid":"0.00001260",
+        #         "Ask":"0.00001242",
+        #         "PrevDay":0.00001253
+        #       }
         #
         timestamp = self.parse8601(self.safe_string(ticker, 'TimeStamp'))
         symbol = None
@@ -359,7 +290,7 @@ class kryptono (Exchange):
             if marketId in self.markets_by_id:
                 market = self.markets_by_id[marketId]
             else:
-                symbol = self.parse_symbol(marketId)
+                symbol = self.parseSymbol(marketId)
         if (symbol is None) and (market is not None):
             symbol = market['symbol']
         previous = self.safe_float(ticker, 'PrevDay')
@@ -397,6 +328,50 @@ class kryptono (Exchange):
     def fetch_tickers(self, symbols=None, params={}):
         self.load_markets()
         response = self.marketGetGetmarketsummaries(params)
+        #
+        # {
+        #     "success": "true",
+        #     "message": "",
+        #     "result": [
+        #       {
+        #         "MarketName":"KNOW-BTC",
+        #         "High":0.00001313,
+        #         "Low":0.0000121,
+        #         "BaseVolume":24.06681016,
+        #         "Last":0.00001253,
+        #         "TimeStamp":"2018-07-10T07:44:56.936Z",
+        #         "Volume":1920735.0486831602,
+        #         "Bid":"0.00001260",
+        #         "Ask":"0.00001242",
+        #         "PrevDay":0.00001253
+        #       },
+        #       {
+        #         "MarketName":"KNOW-ETH",
+        #         "High":0.00018348,
+        #         "Low":0.00015765,
+        #         "BaseVolume":244.82775523,
+        #         "Last":0.00017166,
+        #         "TimeStamp":"2018-07-10T07:46:47.958Z",
+        #         "Volume":1426236.4862518935,
+        #         "Bid":"0.00017663",
+        #         "Ask":"0.00017001",
+        #         "PrevDay":0.00017166,
+        #       },
+        #       ...
+        #     ],
+        #     "volumes": [
+        #       {
+        #         "CoinName":"BTC",
+        #         "Volume":571.64749041
+        #       },
+        #       {
+        #         "CoinName":"KNOW",
+        #         "Volume":19873172.0273
+        #       }
+        #     ],
+        #     "t": 1531208813959
+        #   }
+        #
         result = self.safe_value(response, 'result')
         tickers = []
         for i in range(0, len(result)):
@@ -412,731 +387,106 @@ class kryptono (Exchange):
         }
         response = self.marketGetGetmarketsummaries(self.extend(request, params))
         #
-        #     {
-        #         "success":true,
-        #         "message":"",
-        #         "result":[
-        #             {
-        #                 "MarketName":"BTC-ETH",
-        #                 "High":0.02127099,
-        #                 "Low":0.02035064,
-        #                 "Volume":10288.40271571,
-        #                 "Last":0.02070510,
-        #                 "BaseVolume":214.64663206,
-        #                 "TimeStamp":"2019-09-18T21:03:59.897",
-        #                 "Bid":0.02070509,
-        #                 "Ask":0.02070510,
-        #                 "OpenBuyOrders":1228,
-        #                 "OpenSellOrders":5899,
-        #                 "PrevDay":0.02082823,
-        #                 "Created":"2015-08-14T09:02:24.817"
-        #             }
-        #         ]
-        #     }
+        # {
+        #     "success": "true",
+        #     "message": "",
+        #     "result": [
+        #       {
+        #         "MarketName":"KNOW-BTC",
+        #         "High":0.00001313,
+        #         "Low":0.0000121,
+        #         "BaseVolume":24.06681016,
+        #         "Last":0.00001253,
+        #         "TimeStamp":"2018-07-10T07:44:56.936Z",
+        #         "Volume":1920735.0486831602,
+        #         "Bid":"0.00001260",
+        #         "Ask":"0.00001242",
+        #         "PrevDay":0.00001253
+        #       },
+        #       {
+        #         "MarketName":"KNOW-ETH",
+        #         "High":0.00018348,
+        #         "Low":0.00015765,
+        #         "BaseVolume":244.82775523,
+        #         "Last":0.00017166,
+        #         "TimeStamp":"2018-07-10T07:46:47.958Z",
+        #         "Volume":1426236.4862518935,
+        #         "Bid":"0.00017663",
+        #         "Ask":"0.00017001",
+        #         "PrevDay":0.00017166,
+        #       },
+        #       ...
+        #     ],
+        #     "volumes": [
+        #       {
+        #         "CoinName":"BTC",
+        #         "Volume":571.64749041
+        #       },
+        #       {
+        #         "CoinName":"KNOW",
+        #         "Volume":19873172.0273
+        #       }
+        #     ],
+        #     "t": 1531208813959
+        #   }
         #
         ticker = response['result'][0]
         return self.parse_ticker(ticker, market)
 
-    def parse_trade(self, trade, market=None):
-    #     timestamp = self.parse8601(trade['TimeStamp'] + '+00:00')
-    #     side = None
-    #     if trade['OrderType'] == 'BUY':
-    #         side = 'buy'
-    #     elif trade['OrderType'] == 'SELL':
-    #         side = 'sell'
-    #     }
-    #     id = self.safe_string_2(trade, 'Id', 'ID')
-    #     symbol = None
-    #     if market is not None:
-    #         symbol = market['symbol']
-    #     }
-    #     cost = None
-    #     price = self.safe_float(trade, 'Price')
-    #     amount = self.safe_float(trade, 'Quantity')
-    #     if amount is not None:
-    #         if price is not None:
-    #             cost = price * amount
-    #         }
-    #     }
-    #     return {
-    #         'info': trade,
-    #         'timestamp': timestamp,
-    #         'datetime': self.iso8601(timestamp),
-    #         'symbol': symbol,
-    #         'id': id,
-    #         'order': None,
-    #         'type': 'limit',
-    #         'takerOrMaker': None,
-    #         'side': side,
-    #         'price': price,
-    #         'amount': amount,
-    #         'cost': cost,
-    #         'fee': None,
-    #     }
-
     def fetch_trades(self, symbol, since=None, limit=None, params={}):
         self.load_markets()
-        market = self.market(symbol)
-        request = {
-            'symbol': symbol,
-        }
-        response = self.v1GetHt(self.extend(request, params))
-        if 'history' in response:
-            if response['history'] is not None:
-                history = response.history.map((item) => {
-                    return {...item, 'timestamp': item.time}
-                })
-                return self.parse_trades(history, market, since, limit)
-        raise ExchangeError(self.id + ' fetchTrades() returned None response')
+        # market = self.market(symbol)
+        # request = {
+        #     'symbol': symbol,
+        #}
+        # response = self.v1GetHt(self.extend(request, params))
+        #
+        # {
+        # "symbol":"KNOW_BTC",
+        # "limit":100,
+        # "history":[
+        #     {
+        #     "id":139638,
+        #     "price":"0.00001723",
+        #     "qty":"81.00000000",
+        #     "isBuyerMaker":false,
+        #     "time":1529262196270
+        #     }
+        #],
+        # "time":1529298130192
+        #}
+        #
+        # if 'history' in response:
+        #     if response['history'] is not None:
+        #         history = response.history.map(item =>({...item, 'timestamp': item.time}))
+        #         return self.parse_trades(history, market, since, limit)
+        #     }
+        #}
+        # raise ExchangeError(self.id + ' fetchTrades() returned None response')
 
     def parse_ohlcv(self, ohlcv, market=None, timeframe='1d', since=None, limit=None):
-    #     timestamp = self.parse8601(ohlcv['T'] + '+00:00')
-    #     return [
-    #         timestamp,
-    #         ohlcv['O'],
-    #         ohlcv['H'],
-    #         ohlcv['L'],
-    #         ohlcv['C'],
-    #         ohlcv['V'],
-    #     ]
+        timestamp = self.parse8601(ohlcv['T'] + '+00:00')
+        return [
+            timestamp,
+            ohlcv['O'],
+            ohlcv['H'],
+            ohlcv['L'],
+            ohlcv['C'],
+            ohlcv['V'],
+        ]
 
     def fetch_ohlcv(self, symbol, timeframe='1m', since=None, limit=None, params={}):
+        # https://engine2.kryptono.exchange/api/v1/cs?symbol=BTC_USDT&tt=1m
         self.load_markets()
         market = self.market(symbol)
         request = {
             'tickInterval': self.timeframes[timeframe],
             'marketName': market['id'],
         }
-        response = self.v2GetMarketGetTicks(self.extend(request, params))
+        response = self.v1GetCs(self.extend(request, params))
         if 'result' in response:
             if response['result']:
                 return self.parse_ohlcvs(response['result'], market, timeframe, since, limit)
-
-    def fetch_open_orders(self, symbol=None, since=None, limit=None, params={}):
-    #     self.load_markets()
-    #     request = {}
-    #     market = None
-    #     if symbol is not None:
-    #         market = self.market(symbol)
-    #         request['market'] = market['id']
-    #     }
-    #     response = self.marketGetOpenorders(self.extend(request, params))
-    #     result = self.safe_value(response, 'result', [])
-    #     orders = self.parse_orders(result, market, since, limit)
-    #     return self.filter_by_symbol(orders, symbol)
-
-    def create_order(self, symbol, type, side, amount, price=None, params={}):
-    #     if type != 'limit':
-    #         raise ExchangeError(self.id + ' allows limit orders only')
-    #     }
-    #     self.load_markets()
-    #     market = self.market(symbol)
-    #     method = 'marketGet' + self.capitalize(side) + type
-    #     request = {
-    #         'market': market['id'],
-    #         'quantity': self.amount_to_precision(symbol, amount),
-    #         'rate': self.price_to_precision(symbol, price),
-    #     }
-    #     # if type == 'limit':
-    #     #     order['rate'] = self.price_to_precision(symbol, price)
-    #     response = getattr(self, method)(self.extend(request, params))
-    #     orderIdField = self.get_order_id_field()
-    #     orderId = self.safe_string(response['result'], orderIdField)
-    #     return {
-    #         'info': response,
-    #         'id': orderId,
-    #         'symbol': symbol,
-    #         'type': type,
-    #         'side': side,
-    #         'status': 'open',
-    #     }
-
-    def get_order_id_field(self):
-    #     return 'uuid'
-
-    def cancel_order(self, id, symbol=None, params={}):
-    #     self.load_markets()
-    #     orderIdField = self.get_order_id_field()
-    #     request = {}
-    #     request[orderIdField] = id
-    #     response = self.marketGetCancel(self.extend(request, params))
-    #     #
-    #     #     {
-    #     #         "success": True,
-    #     #         "message": "''",
-    #     #         "result": {
-    #     #             "uuid": "614c34e4-8d71-11e3-94b5-425861b86ab6"
-    #     #         }
-    #     #     }
-    #     #
-    #     return self.extend(self.parse_order(response), {
-    #         'status': 'canceled',
-    #     })
-
-    def fetch_deposits(self, code=None, since=None, limit=None, params={}):
-    #     self.load_markets()
-    #     # https://support.bittrex.com/hc/en-us/articles/115003723911
-    #     request = {}
-    #     currency = None
-    #     if code is not None:
-    #         currency = self.currency(code)
-    #         request['currency'] = currency['id']
-    #     }
-    #     response = self.accountGetDeposithistory(self.extend(request, params))
-    #     #
-    #     #     {success:    True,
-    #     #       message:   "",
-    #     #        result: [{           Id:  22578097,
-    #     #                           Amount:  0.3,
-    #     #                         Currency: "ETH",
-    #     #                    Confirmations:  15,
-    #     #                      LastUpdated: "2018-06-10T07:12:10.57",
-    #     #                             TxId: "0xf50b5ba2ca5438b58f93516eaa523eaf35b4420ca0f24061003df1be7…",
-    #     #                    CryptoAddress: "0xb25f281fa51f1635abd4a60b0870a62d2a7fa404"                    }]}
-    #     #
-    #     # we cannot filter by `since` timestamp, as it isn't set by Bittrex
-    #     # see https://github.com/ccxt/ccxt/issues/4067
-    #     # return self.parse_transactions(response['result'], currency, since, limit)
-    #     return self.parse_transactions(response['result'], currency, None, limit)
-
-    def fetch_withdrawals(self, code=None, since=None, limit=None, params={}):
-    #     self.load_markets()
-    #     # https://support.bittrex.com/hc/en-us/articles/115003723911
-    #     request = {}
-    #     currency = None
-    #     if code is not None:
-    #         currency = self.currency(code)
-    #         request['currency'] = currency['id']
-    #     }
-    #     response = self.accountGetWithdrawalhistory(self.extend(request, params))
-    #     #
-    #     #     {
-    #     #         "success" : True,
-    #     #         "message" : "",
-    #     #         "result" : [{
-    #     #                 "PaymentUuid" : "b32c7a5c-90c6-4c6e-835c-e16df12708b1",
-    #     #                 "Currency" : "BTC",
-    #     #                 "Amount" : 17.00000000,
-    #     #                 "Address" : "1DfaaFBdbB5nrHj87x3NHS4onvw1GPNyAu",
-    #     #                 "Opened" : "2014-07-09T04:24:47.217",
-    #     #                 "Authorized" : True,
-    #     #                 "PendingPayment" : False,
-    #     #                 "TxCost" : 0.00020000,
-    #     #                 "TxId" : null,
-    #     #                 "Canceled" : True,
-    #     #                 "InvalidAddress" : False
-    #     #             }, {
-    #     #                 "PaymentUuid" : "d193da98-788c-4188-a8f9-8ec2c33fdfcf",
-    #     #                 "Currency" : "XC",
-    #     #                 "Amount" : 7513.75121715,
-    #     #                 "Address" : "TcnSMgAd7EonF2Dgc4c9K14L12RBaW5S5J",
-    #     #                 "Opened" : "2014-07-08T23:13:31.83",
-    #     #                 "Authorized" : True,
-    #     #                 "PendingPayment" : False,
-    #     #                 "TxCost" : 0.00002000,
-    #     #                 "TxId" : "d8a575c2a71c7e56d02ab8e26bb1ef0a2f6cf2094f6ca2116476a569c1e84f6e",
-    #     #                 "Canceled" : False,
-    #     #                 "InvalidAddress" : False
-    #     #             }
-    #     #         ]
-    #     #     }
-    #     #
-    #     return self.parse_transactions(response['result'], currency, since, limit)
-
-    def parse_transaction(self, transaction, currency=None):
-    #     #
-    #     # fetchDeposits
-    #     #
-    #     #     {
-    #     #         Id:  72578097,
-    #     #         Amount:  0.3,
-    #     #         Currency: "ETH",
-    #     #         Confirmations:  15,
-    #     #         LastUpdated: "2018-06-17T07:12:14.57",
-    #     #         TxId: "0xb31b5ba2ca5438b58f93516eaa523eaf35b4420ca0f24061003df1be7…",
-    #     #         CryptoAddress: "0x2d5f281fa51f1635abd4a60b0870a62d2a7fa404"
-    #     #     }
-    #     #
-    #     # fetchWithdrawals
-    #     #
-    #     #     {
-    #     #         "PaymentUuid" : "e293da98-788c-4188-a8f9-8ec2c33fdfcf",
-    #     #         "Currency" : "XC",
-    #     #         "Amount" : 7513.75121715,
-    #     #         "Address" : "EVnSMgAd7EonF2Dgc4c9K14L12RBaW5S5J",
-    #     #         "Opened" : "2014-07-08T23:13:31.83",
-    #     #         "Authorized" : True,
-    #     #         "PendingPayment" : False,
-    #     #         "TxCost" : 0.00002000,
-    #     #         "TxId" : "b4a575c2a71c7e56d02ab8e26bb1ef0a2f6cf2094f6ca2116476a569c1e84f6e",
-    #     #         "Canceled" : False,
-    #     #         "InvalidAddress" : False
-    #     #     }
-    #     #
-    #     id = self.safe_string_2(transaction, 'Id', 'PaymentUuid')
-    #     amount = self.safe_float(transaction, 'Amount')
-    #     address = self.safe_string_2(transaction, 'CryptoAddress', 'Address')
-    #     txid = self.safe_string(transaction, 'TxId')
-    #     updated = self.parse8601(self.safe_string(transaction, 'LastUpdated'))
-    #     opened = self.parse8601(self.safe_string(transaction, 'Opened'))
-    #     timestamp = opened if opened else updated
-    #     type = 'deposit' if (opened is None) else 'withdrawal'
-    #     currencyId = self.safe_string(transaction, 'Currency')
-    #     code = self.safe_currency_code(currencyId, currency)
-    #     status = 'pending'
-    #     if type == 'deposit':
-    #         #
-    #         # deposits numConfirmations never reach the minConfirmations number
-    #         # we set all of them to 'ok', otherwise they'd all be 'pending'
-    #         #
-    #         #     numConfirmations = self.safe_integer(transaction, 'Confirmations', 0)
-    #         #     minConfirmations = self.safe_integer(currency['info'], 'MinConfirmation')
-    #         #     if numConfirmations >= minConfirmations:
-    #         #         status = 'ok'
-    #         #     }
-    #         #
-    #         status = 'ok'
-    #     else:
-    #         authorized = self.safe_value(transaction, 'Authorized', False)
-    #         pendingPayment = self.safe_value(transaction, 'PendingPayment', False)
-    #         canceled = self.safe_value(transaction, 'Canceled', False)
-    #         invalidAddress = self.safe_value(transaction, 'InvalidAddress', False)
-    #         if invalidAddress:
-    #             status = 'failed'
-    #         elif canceled:
-    #             status = 'canceled'
-    #         elif pendingPayment:
-    #             status = 'pending'
-    #         elif authorized and (txid is not None):
-    #             status = 'ok'
-    #         }
-    #     }
-    #     feeCost = self.safe_float(transaction, 'TxCost')
-    #     if feeCost is None:
-    #         if type == 'deposit':
-    #             # according to https://support.bittrex.com/hc/en-us/articles/115000199651-What-fees-does-Bittrex-charge-
-    #             feeCost = 0  # FIXME: remove hardcoded value that may change any time
-    #         }
-    #     }
-    #     return {
-    #         'info': transaction,
-    #         'id': id,
-    #         'currency': code,
-    #         'amount': amount,
-    #         'address': address,
-    #         'tag': None,
-    #         'status': status,
-    #         'type': type,
-    #         'updated': updated,
-    #         'txid': txid,
-    #         'timestamp': timestamp,
-    #         'datetime': self.iso8601(timestamp),
-    #         'fee': {
-    #             'currency': code,
-    #             'cost': feeCost,
-    #         },
-    #     }
-
-    def parse_symbol(self, id):
-    #     quoteId, baseId = id.split(self.options['symbolSeparator'])
-    #     base = self.safe_currency_code(baseId)
-    #     quote = self.safe_currency_code(quoteId)
-    #     return base + '/' + quote
-
-    def parse_order(self, order, market=None):
-    #     if 'marketSymbol' in order:
-    #         return self.parse_order_v3(order, market)
-    #     else:
-    #         return self.parse_order_v2(order, market)
-    #     }
-
-    def parse_orders(self, orders, market=None, since=None, limit=None, params={}):
-    #     if self.options['fetchClosedOrdersFilterBySince']:
-    #         return super(kryptono, self).parse_orders(orders, market, since, limit, params)
-    #     else:
-    #         return super(kryptono, self).parse_orders(orders, market, None, limit, params)
-    #     }
-
-    def parse_order_status(self, status):
-    #     statuses = {
-    #         'CLOSED': 'closed',
-    #         'OPEN': 'open',
-    #         'CANCELLED': 'canceled',
-    #         'CANCELED': 'canceled',
-    #     }
-    #     return self.safe_string(statuses, status, status)
-
-    def parse_order_v3(self, order, market=None):
-    #     #
-    #     #     {
-    #     #         id: '1be35109-b763-44ce-b6ea-05b6b0735c0c',
-    #     #         marketSymbol: 'LTC-ETH',
-    #     #         direction: 'BUY',
-    #     #         type: 'LIMIT',
-    #     #         quantity: '0.50000000',
-    #     #         limit: '0.17846699',
-    #     #         timeInForce: 'GOOD_TIL_CANCELLED',
-    #     #         fillQuantity: '0.50000000',
-    #     #         commission: '0.00022286',
-    #     #         proceeds: '0.08914915',
-    #     #         status: 'CLOSED',
-    #     #         createdAt: '2018-06-23T13:14:28.613Z',
-    #     #         updatedAt: '2018-06-23T13:14:30.19Z',
-    #     #         closedAt: '2018-06-23T13:14:30.19Z'
-    #     #     }
-    #     #
-    #     marketSymbol = self.safe_string(order, 'marketSymbol')
-    #     symbol = None
-    #     feeCurrency = None
-    #     if marketSymbol is not None:
-    #         baseId, quoteId = marketSymbol.split('-')
-    #         base = self.safe_currency_code(baseId)
-    #         quote = self.safe_currency_code(quoteId)
-    #         symbol = base + '/' + quote
-    #         feeCurrency = quote
-    #     }
-    #     direction = self.safe_string_lower(order, 'direction')
-    #     createdAt = self.safe_string(order, 'createdAt')
-    #     updatedAt = self.safe_string(order, 'updatedAt')
-    #     closedAt = self.safe_string(order, 'closedAt')
-    #     lastTradeTimestamp = None
-    #     if closedAt is not None:
-    #         lastTradeTimestamp = self.parse8601(closedAt)
-    #     elif updatedAt:
-    #         lastTradeTimestamp = self.parse8601(updatedAt)
-    #     }
-    #     timestamp = self.parse8601(createdAt)
-    #     type = self.safe_string_lower(order, 'type')
-    #     quantity = self.safe_float(order, 'quantity')
-    #     limit = self.safe_float(order, 'limit')
-    #     fillQuantity = self.safe_float(order, 'fillQuantity')
-    #     commission = self.safe_float(order, 'commission')
-    #     proceeds = self.safe_float(order, 'proceeds')
-    #     status = self.safe_string_lower(order, 'status')
-    #     average = None
-    #     remaining = None
-    #     if fillQuantity is not None:
-    #         if proceeds is not None:
-    #             if fillQuantity > 0:
-    #                 average = proceeds / fillQuantity
-    #             elif proceeds == 0:
-    #                 average = 0
-    #             }
-    #         }
-    #         if quantity is not None:
-    #             remaining = quantity - fillQuantity
-    #         }
-    #     }
-    #     return {
-    #         'id': self.safe_string(order, 'id'),
-    #         'timestamp': timestamp,
-    #         'datetime': self.iso8601(timestamp),
-    #         'lastTradeTimestamp': lastTradeTimestamp,
-    #         'symbol': symbol,
-    #         'type': type,
-    #         'side': direction,
-    #         'price': limit,
-    #         'cost': proceeds,
-    #         'average': average,
-    #         'amount': quantity,
-    #         'filled': fillQuantity,
-    #         'remaining': remaining,
-    #         'status': status,
-    #         'fee': {
-    #             'cost': commission,
-    #             'currency': feeCurrency,
-    #         },
-    #         'info': order,
-    #     }
-
-    def parse_order_v2(self, order, market=None):
-    #     #
-    #     #     {
-    #     #         "Uuid": "string(uuid)",
-    #     #         "OrderUuid": "8925d746-bc9f-4684-b1aa-e507467aaa99",
-    #     #         "Exchange": "BTC-LTC",
-    #     #         "OrderType": "string",
-    #     #         "Quantity": 100000,
-    #     #         "QuantityRemaining": 100000,
-    #     #         "Limit": 1e-8,
-    #     #         "CommissionPaid": 0,
-    #     #         "Price": 0,
-    #     #         "PricePerUnit": null,
-    #     #         "Opened": "2014-07-09T03:55:48.583",
-    #     #         "Closed": null,
-    #     #         "CancelInitiated": "boolean",
-    #     #         "ImmediateOrCancel": "boolean",
-    #     #         "IsConditional": "boolean"
-    #     #     }
-    #     #
-    #     side = self.safe_string_2(order, 'OrderType', 'Type')
-    #     isBuyOrder = (side == 'LIMIT_BUY') or (side == 'BUY')
-    #     isSellOrder = (side == 'LIMIT_SELL') or (side == 'SELL')
-    #     if isBuyOrder:
-    #         side = 'buy'
-    #     }
-    #     if isSellOrder:
-    #         side = 'sell'
-    #     }
-    #     # We parse different fields in a very specific order.
-    #     # Order might well be closed and then canceled.
-    #     status = None
-    #     if ('Opened' in list(order.keys())) and order['Opened']:
-    #         status = 'open'
-    #     }
-    #     if ('Closed' in list(order.keys())) and order['Closed']:
-    #         status = 'closed'
-    #     }
-    #     if ('CancelInitiated' in list(order.keys())) and order['CancelInitiated']:
-    #         status = 'canceled'
-    #     }
-    #     if ('Status' in list(order.keys())) and self.options['parseOrderStatus']:
-    #         status = self.parse_order_status(self.safe_string(order, 'Status'))
-    #     }
-    #     symbol = None
-    #     if 'Exchange' in order:
-    #         marketId = self.safe_string(order, 'Exchange')
-    #         if marketId is not None:
-    #             if marketId in self.markets_by_id:
-    #                 market = self.markets_by_id[marketId]
-    #                 symbol = market['symbol']
-    #             else:
-    #                 symbol = self.parse_symbol(marketId)
-    #             }
-    #         }
-    #     else:
-    #         if market is not None:
-    #             symbol = market['symbol']
-    #         }
-    #     }
-    #     timestamp = None
-    #     opened = self.safe_string(order, 'Opened')
-    #     if opened is not None:
-    #         timestamp = self.parse8601(opened + '+00:00')
-    #     }
-    #     created = self.safe_string(order, 'Created')
-    #     if created is not None:
-    #         timestamp = self.parse8601(created + '+00:00')
-    #     }
-    #     lastTradeTimestamp = None
-    #     lastTimestamp = self.safe_string(order, 'TimeStamp')
-    #     if lastTimestamp is not None:
-    #         lastTradeTimestamp = self.parse8601(lastTimestamp + '+00:00')
-    #     }
-    #     closed = self.safe_string(order, 'Closed')
-    #     if closed is not None:
-    #         lastTradeTimestamp = self.parse8601(closed + '+00:00')
-    #     }
-    #     if timestamp is None:
-    #         timestamp = lastTradeTimestamp
-    #     }
-    #     fee = None
-    #     feeCost = self.safe_float_2(order, 'Commission', 'CommissionPaid')
-    #     if feeCost is not None:
-    #         fee = {
-    #             'cost': feeCost,
-    #         }
-    #         if market is not None:
-    #             fee['currency'] = market['quote']
-    #         elif symbol is not None:
-    #             currencyIds = symbol.split('/')
-    #             quoteCurrencyId = currencyIds[1]
-    #             fee['currency'] = self.safe_currency_code(quoteCurrencyId)
-    #         }
-    #     }
-    #     price = self.safe_float(order, 'Limit')
-    #     cost = self.safe_float(order, 'Price')
-    #     amount = self.safe_float(order, 'Quantity')
-    #     remaining = self.safe_float(order, 'QuantityRemaining')
-    #     filled = None
-    #     if amount is not None and remaining is not None:
-    #         filled = amount - remaining
-    #         if (status == 'closed') and (remaining > 0):
-    #             status = 'canceled'
-    #         }
-    #     }
-    #     if not cost:
-    #         if price and filled:
-    #             cost = price * filled
-    #         }
-    #     }
-    #     if not price:
-    #         if cost and filled:
-    #             price = cost / filled
-    #         }
-    #     }
-    #     average = self.safe_float(order, 'PricePerUnit')
-    #     id = self.safe_string_2(order, 'OrderUuid', 'OrderId')
-    #     return {
-    #         'info': order,
-    #         'id': id,
-    #         'timestamp': timestamp,
-    #         'datetime': self.iso8601(timestamp),
-    #         'lastTradeTimestamp': lastTradeTimestamp,
-    #         'symbol': symbol,
-    #         'type': 'limit',
-    #         'side': side,
-    #         'price': price,
-    #         'cost': cost,
-    #         'average': average,
-    #         'amount': amount,
-    #         'filled': filled,
-    #         'remaining': remaining,
-    #         'status': status,
-    #         'fee': fee,
-    #     }
-
-    def fetch_order(self, id, symbol=None, params={}):
-    #     self.load_markets()
-    #     response = None
-    #     try:
-    #         orderIdField = self.get_order_id_field()
-    #         request = {}
-    #         request[orderIdField] = id
-    #         response = self.accountGetOrder(self.extend(request, params))
-    #     except Exception as e:
-    #         if self.last_json_response:
-    #             message = self.safe_string(self.last_json_response, 'message')
-    #             if message == 'UUID_INVALID':
-    #                 raise OrderNotFound(self.id + ' fetchOrder() error: ' + self.last_http_response)
-    #             }
-    #         }
-    #         raise e
-    #     }
-    #     if not response['result']:
-    #         raise OrderNotFound(self.id + ' order ' + id + ' not found')
-    #     }
-    #     return self.parse_order(response['result'])
-
-    def order_to_trade(self, order):
-    #     # self entire method should be moved to the base class
-    #     timestamp = self.safe_integer_2(order, 'lastTradeTimestamp', 'timestamp')
-    #     return {
-    #         'id': self.safe_string(order, 'id'),
-    #         'side': self.safe_string(order, 'side'),
-    #         'order': self.safe_string(order, 'id'),
-    #         'price': self.safe_float(order, 'average'),
-    #         'amount': self.safe_float(order, 'filled'),
-    #         'cost': self.safe_float(order, 'cost'),
-    #         'symbol': self.safe_string(order, 'symbol'),
-    #         'timestamp': timestamp,
-    #         'datetime': self.iso8601(timestamp),
-    #         'fee': self.safe_value(order, 'fee'),
-    #         'info': order,
-    #     }
-
-    def orders_to_trades(self, orders):
-    #     # self entire method should be moved to the base class
-    #     result = []
-    #     for i in range(0, len(orders)):
-    #         result.append(self.order_to_trade(orders[i]))
-    #     }
-    #     return result
-
-    def fetch_my_trades(self, symbol=None, since=None, limit=None, params={}):
-    #     orders = self.fetch_closed_orders(symbol, since, limit, params)
-    #     return self.orders_to_trades(orders)
-
-    def fetch_closed_orders(self, symbol=None, since=None, limit=None, params={}):
-    #     method = self.safe_string(self.options, 'fetchClosedOrdersMethod', 'fetch_closed_orders_v3')
-    #     return getattr(self, method)(symbol, since, limit, params)
-
-    def fetch_closed_orders_v2(self, symbol=None, since=None, limit=None, params={}):
-    #     self.load_markets()
-    #     request = {}
-    #     market = None
-    #     if symbol is not None:
-    #         market = self.market(symbol)
-    #         request['market'] = market['id']
-    #     }
-    #     response = self.accountGetOrderhistory(self.extend(request, params))
-    #     result = self.safe_value(response, 'result', [])
-    #     orders = self.parse_orders(result, market, since, limit)
-    #     if symbol is not None:
-    #         return self.filter_by_symbol(orders, symbol)
-    #     }
-    #     return orders
-
-    def fetch_closed_orders_v3(self, symbol=None, since=None, limit=None, params={}):
-    #     self.load_markets()
-    #     request = {}
-    #     if limit is not None:
-    #         request['pageSize'] = limit
-    #     }
-    #     if since is not None:
-    #         request['startDate'] = self.ymdhms(since, 'T') + 'Z'
-    #     }
-    #     market = None
-    #     if symbol is not None:
-    #         market = self.market(symbol)
-    #         # because of self line we will have to rethink the entire v3
-    #         # in other words, markets define all the rest of the API
-    #         # and v3 market ids are reversed in comparison to v2
-    #         # v3 has to be a completely separate implementation
-    #         # otherwise we will have to shuffle symbols and currencies everywhere
-    #         # which is prone to errors, as was shown here
-    #         # https://github.com/ccxt/ccxt/pull/5219#issuecomment-499646209
-    #         request['marketSymbol'] = market['base'] + '-' + market['quote']
-    #     }
-    #     response = self.v3GetOrdersClosed(self.extend(request, params))
-    #     orders = self.parse_orders(response, market, since, limit)
-    #     if symbol is not None:
-    #         return self.filter_by_symbol(orders, symbol)
-    #     }
-    #     return orders
-
-    def fetch_deposit_address(self, code, params={}):
-    #     self.load_markets()
-    #     currency = self.currency(code)
-    #     request = {
-    #         'currency': currency['id'],
-    #     }
-    #     response = self.accountGetDepositaddress(self.extend(request, params))
-    #     #
-    #     #     {"success": False, "message": "ADDRESS_GENERATING", "result": null}
-    #     #
-    #     #     {success:    True,
-    #     #       message:   "",
-    #     #        result: {Currency: "INCNT",
-    #     #                   Address: "3PHvQt9bK21f7eVQVdJzrNPcsMzXabEA5Ha"} }}
-    #     #
-    #     address = self.safe_string(response['result'], 'Address')
-    #     message = self.safe_string(response, 'message')
-    #     if not address or message == 'ADDRESS_GENERATING':
-    #         raise AddressPending(self.id + ' the address for ' + code + ' is being generated(pending, not ready yet, retry again later)')
-    #     }
-    #     tag = None
-    #     if currency['type'] in self.options['tag']:
-    #         tag = address
-    #         address = currency['address']
-    #     }
-    #     self.check_address(address)
-    #     return {
-    #         'currency': code,
-    #         'address': address,
-    #         'tag': tag,
-    #         'info': response,
-    #     }
-
-    def withdraw(self, code, amount, address, tag=None, params={}):
-    #     self.check_address(address)
-    #     self.load_markets()
-    #     currency = self.currency(code)
-    #     request = {
-    #         'currency': currency['id'],
-    #         'quantity': amount,
-    #         'address': address,
-    #     }
-    #     if tag is not None:
-    #         request['paymentid'] = tag
-    #     }
-    #     response = self.accountGetWithdraw(self.extend(request, params))
-    #     result = self.safe_value(response, 'result', {})
-    #     id = self.safe_string(result, 'uuid')
-    #     return {
-    #         'info': response,
-    #         'id': id,
-    #     }
 
     def sign(self, path, api='public', method='GET', params={}, headers=None, body=None):
         url = self.implode_params(self.urls['api'][api], {
@@ -1144,136 +494,34 @@ class kryptono (Exchange):
         }) + '/'
         if api != 'v2' and api != 'v3' and api != 'v3public':
             url += self.version + '/'
-        if api == 'public':
-            url += api + '/' + method.lower() + path
-            if params:
-                url += '?' + self.urlencode(params)
-        elif api == 'v3public':
-            url += path
-            if params:
-                url += '?' + self.urlencode(params)
-        elif api == 'v2':
-            url += path
-            if params:
-                url += '?' + self.urlencode(params)
-        elif api == 'v3':
-            url += path
-            if params:
-                url += '?' + self.rawencode(params)
-            contentHash = self.hash(self.encode(''), 'sha512', 'hex')
-            timestamp = str(self.milliseconds())
-            auth = timestamp + url + method + contentHash
-            subaccountId = self.safe_value(self.options, 'subaccountId')
-            if subaccountId is not None:
-                auth += subaccountId
-            signature = self.hmac(self.encode(auth), self.encode(self.secret), hashlib.sha512)
-            headers = {
-                'Api-Key': self.apiKey,
-                'Api-Timestamp': timestamp,
-                'Api-Content-Hash': contentHash,
-                'Api-Signature': signature,
-            }
-            if subaccountId is not None:
-                headers['Api-Subaccount-Id'] = subaccountId
-        else:
+        route = path.split('/')
+        if route == 'account':
             self.check_required_credentials()
-            url += api + '/'
-            if ((api == 'account') and (path != 'withdraw')) or (path == 'openorders'):
-                url += method.lower()
-            request = {
-                'apikey': self.apiKey,
+            url += path
+            query = self.urlencode(self.extend({
+                'timestamp': self.milliseconds(),
+                'recvWindow': self.options['recvWindow'],
+            }, params))
+            signature = self.hmac(self.encode(query), self.encode(self.secret))
+            url += '?' + query
+            headers = {
+                'Authorization': self.apiKey,
+                'Signature': signature,
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/json',
             }
-            disableNonce = self.safe_value(self.options, 'disableNonce')
-            if (disableNonce is None) or not disableNonce:
-                request['nonce'] = self.nonce()
-            url += path + '?' + self.urlencode(self.extend(request, params))
-            signature = self.hmac(self.encode(url), self.encode(self.secret), hashlib.sha512)
-            headers = {'apisign': signature}
+        elif route == 'order':
+            self.check_required_credentials()
+            #  todo we may be able to combine with 'account' part of if statement above if body can be signed similarly
+        else:  # public endpoints
+            url += path
+            if params:
+                url += '?' + self.urlencode(params)
         return {'url': url, 'method': method, 'body': body, 'headers': headers}
 
-    def handle_errors(self, code, reason, url, method, headers, body, response, requestHeaders, requestBody):
-    #     if response is None:
-    #         return  # fallback to default error handler
-    #     }
-    #     #
-    #     #     {success: False, message: "message"}
-    #     #
-    #     if body[0] == '{':
-    #         success = self.safe_value(response, 'success')
-    #         if success is None:
-    #             raise ExchangeError(self.id + ': malformed response: ' + self.json(response))
-    #         }
-    #         if isinstance(success, basestring):
-    #             # bleutrade uses string instead of boolean
-    #             success = True if (success == 'true') else False
-    #         }
-    #         if not success:
-    #             message = self.safe_string(response, 'message')
-    #             feedback = self.id + ' ' + self.json(response)
-    #             exceptions = self.exceptions
-    #             if message == 'APIKEY_INVALID':
-    #                 if self.options['hasAlreadyAuthenticatedSuccessfully']:
-    #                     raise DDoSProtection(feedback)
-    #                 else:
-    #                     raise AuthenticationError(feedback)
-    #                 }
-    #             }
-    #             # https://github.com/ccxt/ccxt/issues/4932
-    #             # the following two lines are now redundant, see line 171 in describe()
-    #             #
-    #             #     if message == 'DUST_TRADE_DISALLOWED_MIN_VALUE_50K_SAT':
-    #             #         raise InvalidOrder(self.id + ' order cost should be over 50k satoshi ' + self.json(response))
-    #             #
-    #             if message == 'INVALID_ORDER':
-    #                 # Bittrex will return an ambiguous INVALID_ORDER message
-    #                 # upon canceling already-canceled and closed orders
-    #                 # therefore self special case for cancelOrder
-    #                 # url = 'https://bittrex.com/api/v1.1/market/cancel?apikey=API_KEY&uuid=ORDER_UUID'
-    #                 cancel = 'cancel'
-    #                 indexOfCancel = url.find(cancel)
-    #                 if indexOfCancel >= 0:
-    #                     urlParts = url.split('?')
-    #                     numParts = len(urlParts)
-    #                     if numParts > 1:
-    #                         query = urlParts[1]
-    #                         params = query.split('&')
-    #                         numParams = len(params)
-    #                         orderId = None
-    #                         for i in range(0, numParams):
-    #                             param = params[i]
-    #                             keyValue = param.split('=')
-    #                             if keyValue[0] == 'uuid':
-    #                                 orderId = keyValue[1]
-    #                                 break
-    #                             }
-    #                         }
-    #                         if orderId is not None:
-    #                             raise OrderNotFound(self.id + ' cancelOrder ' + orderId + ' ' + self.json(response))
-    #                         else:
-    #                             raise OrderNotFound(self.id + ' cancelOrder ' + self.json(response))
-    #                         }
-    #                     }
-    #                 }
-    #             }
-    #             if message in exceptions:
-    #                 raise exceptions[message](feedback)
-    #             }
-    #             if message is not None:
-    #                 if message.find('throttled. Try again') >= 0:
-    #                     raise DDoSProtection(feedback)
-    #                 }
-    #                 if message.find('problem') >= 0:
-    #                     raise ExchangeNotAvailable(feedback)  # 'There was a problem processing your request.  If self problem persists, please contact...')
-    #                 }
-    #             }
-    #             raise ExchangeError(feedback)
-    #         }
-    #     }
-
     def request(self, path, api='public', method='GET', params={}, headers=None, body=None):
-    #     response = self.fetch2(path, api, method, params, headers, body)
-    #     # a workaround for APIKEY_INVALID
-    #     if (api == 'account') or (api == 'market'):
-    #         self.options['hasAlreadyAuthenticatedSuccessfully'] = True
-    #     }
-    #     return response
+        response = self.fetch2(path, api, method, params, headers, body)
+        # a workaround for APIKEY_INVALID
+        if (api == 'account') or (api == 'market'):
+            self.options['hasAlreadyAuthenticatedSuccessfully'] = True
+        return response
