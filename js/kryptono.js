@@ -586,6 +586,7 @@ module.exports = class kryptono extends Exchange {
         return this.filterByArray (tickers, 'symbol', symbols);
     }
 
+    // todo wip
     parseTrade (trade, market = undefined) {
         let symbol = undefined;
         if (market !== undefined) {
