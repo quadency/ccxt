@@ -101,6 +101,14 @@ module.exports = class kryptono extends Exchange {
                     ],
                 },
             },
+            'fees': {
+                'trading': {
+                    'tierBased': false,
+                    'percentage': true,
+                    'taker': 0.001,
+                    'maker': 0.001,
+                },
+            },
             // todo Trading API Information in `https://kryptono.exchange/k/api#developers-guide-api-v2-for-kryptono-exchange-july-13-2018`
             'exceptions': {
                 // 'Call to Cancel was throttled. Try again in 60 seconds.': DDoSProtection,
@@ -233,8 +241,8 @@ module.exports = class kryptono extends Exchange {
         return this.parseBalance (result);
     }
 
-    // WIP
     async fetchOrder (id, symbol = undefined, params = {}) {
+        // WIP
         const request = {
             'order_id': id,
             'timestamp': this.milliseconds (),
@@ -251,7 +259,7 @@ module.exports = class kryptono extends Exchange {
     async fetchOrderBook (symbol, limit = undefined, params = {}) {
         await this.loadMarkets ();
         const request = {
-            'symbol': symbol,
+            'symbol': symbol.split ('/').join ('_'),
         };
         const response = await this.v1GetDp (this.extend (request, params));
         //
@@ -396,6 +404,44 @@ module.exports = class kryptono extends Exchange {
         return this.filterByArray (tickers, 'symbol', symbols);
     }
 
+    parseTrade (trade, market = undefined) {
+        const timestamp = trade['time'];
+        let side = undefined;
+        if (trade['isBuyerMaker'] === true) {
+            side = 'buy';
+        } else if (trade['isBuyerMaker'] === false) {
+            side = 'sell';
+        }
+        const id = trade.id;
+        let symbol = undefined;
+        if (market !== undefined) {
+            symbol = market['symbol'];
+        }
+        let cost = undefined;
+        const price = this.safeFloat (trade, 'price');
+        const amount = this.safeFloat (trade, 'qty');
+        if (amount !== undefined) {
+            if (price !== undefined) {
+                cost = price * amount;
+            }
+        }
+        return {
+            'info': trade,
+            'timestamp': timestamp,
+            'datetime': this.iso8601 (timestamp),
+            'symbol': symbol,
+            'id': id,
+            'order': undefined,
+            'type': 'limit',
+            'takerOrMaker': undefined,
+            'side': side,
+            'price': price,
+            'amount': amount,
+            'cost': cost,
+            'fee': undefined,
+        };
+    }
+
     async fetchTicker (symbol, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
@@ -453,11 +499,11 @@ module.exports = class kryptono extends Exchange {
 
     async fetchTrades (symbol, since = undefined, limit = undefined, params = {}) {
         await this.loadMarkets ();
-        // const market = this.market (symbol);
-        // const request = {
-        //     'symbol': symbol,
-        // };
-        // const response = await this.v1GetHt (this.extend (request, params));
+        const market = this.market (symbol);
+        const request = {
+            'symbol': symbol.split ('/').join ('_'),
+        };
+        const response = await this.v1GetHt (this.extend (request, params));
         //
         // {
         // "symbol":"KNOW_BTC",
@@ -474,12 +520,11 @@ module.exports = class kryptono extends Exchange {
         // "time":1529298130192
         // }
         //
-        // if ('history' in response) {
-        //     if (response['history'] !== undefined) {
-        //         const history = response.history.map (item => ({ ...item, 'timestamp': item.time }));
-        //         return this.parseTrades (history, market, since, limit);
-        //     }
-        // }
+        if ('history' in response) {
+            if (response['history'] !== undefined) {
+                return this.parseTrades (response.history, market, since, limit);
+            }
+        }
         // throw new ExchangeError (this.id + ' fetchTrades() returned undefined response');
     }
 
@@ -515,7 +560,7 @@ module.exports = class kryptono extends Exchange {
         let url = this.implodeParams (this.urls['api'][api], {
             'hostname': this.hostname,
         }) + '/';
-        if (api !== 'v2' && api !== 'v3' && api !== 'v3public') {
+        if (api !== 'v2' && api !== 'v1' && api !== 'market') {
             url += this.version + '/';
         }
         const route = path.split ('/')[0];
