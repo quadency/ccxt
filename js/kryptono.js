@@ -3,7 +3,7 @@
 //  ---------------------------------------------------------------------------
 
 const Exchange = require ('./base/Exchange');
-const { BadSymbol, ExchangeError, AuthenticationError, InvalidOrder, InsufficientFunds, OrderNotFound, PermissionDenied, OnMaintenance } = require ('./base/errors');
+// const { ExchangeError } = require ('./base/errors');
 const { TRUNCATE, DECIMAL_PLACES } = require ('./base/functions/number');
 
 //  ---------------------------------------------------------------------------
@@ -24,7 +24,6 @@ module.exports = class kryptono extends Exchange {
                 'fetchCurrencies': true,
                 'fetchTradingLimits': false,
                 'fetchFundingLimits': false,
-                'fetchOrder': false,
                 'fetchTickers': true, // TODO : Check with doc for fetchTicker
                 'fetchOrderBook': true,
                 'fetchTrades': true,
@@ -36,6 +35,8 @@ module.exports = class kryptono extends Exchange {
                 'fetchDeposits': false,
                 'fetchWithdrawals': false,
                 'fetchDepositAddress': false,
+                'fetchOrder': true, // todo /api/v2/order/details
+                'fetchOrders': true, // todo  /api/v2/order/list/completed
                 'fetchOpenOrders': true, // todo /api/v2/order/list/open
                 'fetchClosedOrders': false, // todo api/v2/order/list/completed
                 'fetchMyTrades': 'emulated', // todo /api/v2/order/list/trades
@@ -74,8 +75,15 @@ module.exports = class kryptono extends Exchange {
                     'get': [
                         'exchange-info',
                         'market-price',
+                        // these endpoints require this.apiKey + this.secret
                         'account/balances',
                         'account/details',
+                        'order/details',
+                        'order/list/all',
+                        'order/list/open',
+                        'order/list/completed',
+                        'order/list/trades',
+                        'order/trade-detail',
                     ],
                 },
                 'market': {
@@ -155,35 +163,36 @@ module.exports = class kryptono extends Exchange {
         const symbols = this.safeValue (response, 'symbols');
         // they mislabeled quotes to base
         const quotes = this.safeValue (response, 'base_currencies');
-        const minQuotesMap = quotes.reduce ((acc, curr) => {
-            acc[curr.currency_code] = {
-                'min': curr.minimum_total_order,
+        const minQuotesMap = {};
+        for (let i = 0; i < quotes.length; i++) {
+            minQuotesMap[quotes[i]['currency_code']] = {
+                'min': quotes[i]['minimum_total_order'],
                 'max': undefined,
             };
-            return acc;
-        }, {});
+        }
         const base = this.safeValue (response, 'coins');
-        const minBaseMap = base.reduce ((acc, curr) => {
-            acc[curr.currency_code] = {
-                'min': curr.minimum_order_amount,
+        const minBaseMap = {};
+        for (let i = 0; i < base.length; i++) {
+            minBaseMap[base[i]['currency_code']] = {
+                'min': base[i]['minimum_order_amount'],
                 'max': undefined,
             };
-            return acc;
-        }, {});
-        return symbols.map ((symbolObj) => {
-            const [base, quote] = symbolObj.symbol.split (this.options['symbolSeparator']);
-            return {
-                'id': symbolObj.symbol,
-                'symbol': `${base}/${quote}`,
+        }
+        const result = [];
+        for (let i = 0; i < symbols.length; i++) {
+            const [base, quote] = symbols[i]['symbol'].split (this.options['symbolSeparator']);
+            result.push ({
+                'id': symbols[i]['symbol'],
+                'symbol': base + '/' + quote,
                 'base': base,
                 'baseId': base,
                 'quote': quote,
                 'quoteId': quote,
-                'active': symbolObj.allow_trading,
-                'info': symbolObj,
+                'active': symbols[i]['allow_trading'],
+                'info': symbols[i],
                 'precision': {
-                    'amount': symbolObj.amount_limit_decimal,
-                    'price': symbolObj.price_limit_decimal,
+                    'amount': symbols[i]['amount_limit_decimal'],
+                    'price': symbols[i]['price_limit_decimal'],
                 },
                 'limits': {
                     'amount': {
@@ -195,8 +204,9 @@ module.exports = class kryptono extends Exchange {
                         'max': undefined,
                     },
                 },
-            };
-        });
+            });
+        }
+        return result;
     }
 
     async fetchBalance (params = {}) {
@@ -214,6 +224,14 @@ module.exports = class kryptono extends Exchange {
             { 'info': response }
         );
         return this.parseBalance (result);
+    }
+
+    async fetchOrder (id, symbol = undefined, params = {}) {
+        const request = {
+            'order_id': id,
+            'timestamp': this.milliseconds (),
+        };
+        request.recvWindow = params.recvWindow ? params.recvWindow : 5000;
     }
 
     async fetchOrderBook (symbol, limit = undefined, params = {}) {
@@ -242,87 +260,6 @@ module.exports = class kryptono extends Exchange {
         //   }
         //
         return this.parseOrderBook (response, response.time);
-    }
-
-    async fetchCurrencies (params = {}) {
-        const response = await this.v2GetExchangeInfo (params);
-        //
-        // {
-        //     "timezone": "UTC",
-        //     "server_time": 1530683054384,
-        //     "rate_limits": [
-        //       {
-        //         "type": "REQUESTS",
-        //         "interval": "MINUTE",
-        //         "limit": 1000
-        //       }
-        //     ],
-        //     "base_currencies": [
-        //       {
-        //         "currency_code": "KNOW",
-        //         "minimum_total_order": "100"
-        //       }
-        //     ],
-        //     "coins": [
-        //       {
-        //         "currency_code": "USDT",
-        //         "name": "Tether",
-        //         "minimum_order_amount": "1"
-        //       }
-        //     ],
-        //     "symbols": [
-        //       {
-        //         "symbol": "GTO_ETH",
-        //         "amount_limit_decimal": 0,
-        //         "price_limit_decimal": 8,
-        //         "allow_trading": true
-        //       }
-        //     ]
-        //   }
-        //
-        const currencies = this.safeValue (response, 'coins', []);
-        const result = {};
-        for (let i = 0; i < currencies.length; i++) {
-            const currency = currencies[i];
-            const id = this.safeString (currency, 'currency_code');
-            // TODO: will need to rethink the fees
-            // to add support for multiple withdrawal/deposit methods and
-            // differentiated fees for each particular method
-            const code = this.safeCurrencyCode (id);
-            const precision = 8; // default precision, todo: fix "magic constants"
-            // const address = this.safeValue (currency, 'BaseAddress');
-            const fee = this.safeFloat (currency, 'TxFee'); // todo: redesign
-            result[code] = {
-                'id': id,
-                'code': code,
-                'address': 'TODO', // TODO see the correct value.
-                'info': currency,
-                'type': 'TODO', // TODO see the correct value.
-                'name': currency.name,
-                'active': true, // TODO: see the correct value.
-                'fee': 'TODO', // TODO: see the correct value.
-                'precision': precision,
-                'limits': {
-                    'amount': {
-                        'min': Math.pow (10, -precision),
-                        'max': undefined,
-                    },
-                    'price': {
-                        'min': Math.pow (10, -precision),
-                        'max': undefined,
-                    },
-                    'cost': {
-                        'min': undefined,
-                        'max': undefined,
-                    },
-                    'withdraw': {
-                        'min': fee,
-                        'max': undefined,
-                    },
-                },
-            };
-        }
-        return result;
     }
 
     parseTicker (ticker, market = undefined) {
@@ -501,12 +438,12 @@ module.exports = class kryptono extends Exchange {
     }
 
     async fetchTrades (symbol, since = undefined, limit = undefined, params = {}) {
-        await this.loadMarkets ();
-        const market = this.market (symbol);
-        const request = {
-            'symbol': symbol,
-        };
-        const response = await this.v1GetHt (this.extend (request, params));
+        // await this.loadMarkets ();
+        // const market = this.market (symbol);
+        // const request = {
+        //     'symbol': symbol,
+        // };
+        // const response = await this.v1GetHt (this.extend (request, params));
         //
         // {
         // "symbol":"KNOW_BTC",
@@ -523,13 +460,13 @@ module.exports = class kryptono extends Exchange {
         // "time":1529298130192
         // }
         //
-        if ('history' in response) {
-            if (response['history'] !== undefined) {
-                const history = response.history.map (item => ({ ...item, 'timestamp': item.time }));
-                return this.parseTrades (history, market, since, limit);
-            }
-        }
-        throw new ExchangeError (this.id + ' fetchTrades() returned undefined response');
+        // if ('history' in response) {
+        //     if (response['history'] !== undefined) {
+        //         const history = response.history.map (item => ({ ...item, 'timestamp': item.time }));
+        //         return this.parseTrades (history, market, since, limit);
+        //     }
+        // }
+        // throw new ExchangeError (this.id + ' fetchTrades() returned undefined response');
     }
 
     parseOHLCV (ohlcv, market = undefined, timeframe = '1d', since = undefined, limit = undefined) {
