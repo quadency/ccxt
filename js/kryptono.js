@@ -36,8 +36,8 @@ module.exports = class kryptono extends Exchange {
                 'fetchWithdrawals': false,
                 'fetchDepositAddress': false,
                 'fetchOrder': true,
-                'fetchOrders': true, // todo  /api/v2/order/list/all
-                'fetchOpenOrders': true, // todo /api/v2/order/list/open
+                'fetchOrders': true,
+                'fetchOpenOrders': true,
                 'fetchClosedOrders': false, // todo api/v2/order/list/completed
                 'fetchMyTrades': 'emulated', // todo /api/v2/order/list/trades
             },
@@ -78,7 +78,6 @@ module.exports = class kryptono extends Exchange {
                         // these endpoints require this.apiKey + this.secret
                         'account/balances',
                         'account/details',
-                        'order/list/open',
                         'order/list/completed',
                         'order/list/trades',
                         'order/trade-detail',
@@ -87,6 +86,7 @@ module.exports = class kryptono extends Exchange {
                         'order/test',
                         'order/details',
                         'order/list/all',
+                        'order/list/open',
                     ],
                 },
                 'market': {
@@ -339,6 +339,38 @@ module.exports = class kryptono extends Exchange {
         }
         const response = await this.v2PostOrderListAll (this.extend (request, params));
         return this.parseOrders (response, market, since, limit);
+    }
+
+    async fetchOpenOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        if (symbol === undefined) {
+            throw new ArgumentsRequired (this.id + ' fetchOrders requires a symbol argument');
+        }
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        const request = {
+            'symbol': market['id'],
+            'timestamp': this.milliseconds (),
+        };
+        const recvWindowParam = this.safeValue (params, 'recvWindow');
+        let recvWindow = 5000;
+        if (recvWindowParam) {
+            recvWindow = recvWindowParam;
+        }
+        request['recvWindow'] = recvWindow;
+        request['limit'] = 50;
+        if (limit) {
+            request['limit'] = limit;
+        }
+        const pageParam = this.safeValue (params, 'page');
+        request['page'] = 0;
+        if (pageParam) {
+            request['page'] = pageParam;
+        }
+        const response = await this.v2PostOrderListOpen (this.extend (request, params));
+        if (response['total'] === 0) {
+            return [];
+        }
+        return this.parseOrders (response['list'], market, since, limit);
     }
 
     async fetchOrderBook (symbol, limit = undefined, params = {}) {

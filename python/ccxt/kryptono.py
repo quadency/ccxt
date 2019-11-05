@@ -47,8 +47,8 @@ class kryptono (Exchange):
                 'fetchWithdrawals': False,
                 'fetchDepositAddress': False,
                 'fetchOrder': True,
-                'fetchOrders': True,  # todo  /api/v2/order/list/all
-                'fetchOpenOrders': True,  # todo /api/v2/order/list/open
+                'fetchOrders': True,
+                'fetchOpenOrders': True,
                 'fetchClosedOrders': False,  # todo api/v2/order/list/completed
                 'fetchMyTrades': 'emulated',  # todo /api/v2/order/list/trades
             },
@@ -89,7 +89,6 @@ class kryptono (Exchange):
                         # these endpoints require self.apiKey + self.secret
                         'account/balances',
                         'account/details',
-                        'order/list/open',
                         'order/list/completed',
                         'order/list/trades',
                         'order/trade-detail',
@@ -98,6 +97,7 @@ class kryptono (Exchange):
                         'order/test',
                         'order/details',
                         'order/list/all',
+                        'order/list/open',
                     ],
                 },
                 'market': {
@@ -326,6 +326,32 @@ class kryptono (Exchange):
             request['limit'] = limit
         response = self.v2PostOrderListAll(self.extend(request, params))
         return self.parse_orders(response, market, since, limit)
+
+    def fetch_open_orders(self, symbol=None, since=None, limit=None, params={}):
+        if symbol is None:
+            raise ArgumentsRequired(self.id + ' fetchOrders requires a symbol argument')
+        self.load_markets()
+        market = self.market(symbol)
+        request = {
+            'symbol': market['id'],
+            'timestamp': self.milliseconds(),
+        }
+        recvWindowParam = self.safe_value(params, 'recvWindow')
+        recvWindow = 5000
+        if recvWindowParam:
+            recvWindow = recvWindowParam
+        request['recvWindow'] = recvWindow
+        request['limit'] = 50
+        if limit:
+            request['limit'] = limit
+        pageParam = self.safe_value(params, 'page')
+        request['page'] = 0
+        if pageParam:
+            request['page'] = pageParam
+        response = self.v2PostOrderListOpen(self.extend(request, params))
+        if response['total'] == 0:
+            return []
+        return self.parse_orders(response['list'], market, since, limit)
 
     def fetch_order_book(self, symbol, limit=None, params={}):
         self.load_markets()

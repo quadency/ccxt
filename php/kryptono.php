@@ -36,8 +36,8 @@ class kryptono extends Exchange {
                 'fetchWithdrawals' => false,
                 'fetchDepositAddress' => false,
                 'fetchOrder' => true,
-                'fetchOrders' => true, // todo  /api/v2/order/list/all
-                'fetchOpenOrders' => true, // todo /api/v2/order/list/open
+                'fetchOrders' => true,
+                'fetchOpenOrders' => true,
                 'fetchClosedOrders' => false, // todo api/v2/order/list/completed
                 'fetchMyTrades' => 'emulated', // todo /api/v2/order/list/trades
             ),
@@ -78,7 +78,6 @@ class kryptono extends Exchange {
                         // these endpoints require $this->apiKey . $this->secret
                         'account/balances',
                         'account/details',
-                        'order/list/open',
                         'order/list/completed',
                         'order/list/trades',
                         'order/trade-detail',
@@ -87,6 +86,7 @@ class kryptono extends Exchange {
                         'order/test',
                         'order/details',
                         'order/list/all',
+                        'order/list/open',
                     ),
                 ),
                 'market' => array (
@@ -339,6 +339,38 @@ class kryptono extends Exchange {
         }
         $response = $this->v2PostOrderListAll (array_merge ($request, $params));
         return $this->parse_orders($response, $market, $since, $limit);
+    }
+
+    public function fetch_open_orders ($symbol = null, $since = null, $limit = null, $params = array ()) {
+        if ($symbol === null) {
+            throw new ArgumentsRequired($this->id . ' fetchOrders requires a $symbol argument');
+        }
+        $this->load_markets();
+        $market = $this->market ($symbol);
+        $request = array (
+            'symbol' => $market['id'],
+            'timestamp' => $this->milliseconds (),
+        );
+        $recvWindowParam = $this->safe_value($params, 'recvWindow');
+        $recvWindow = 5000;
+        if ($recvWindowParam) {
+            $recvWindow = $recvWindowParam;
+        }
+        $request['recvWindow'] = $recvWindow;
+        $request['limit'] = 50;
+        if ($limit) {
+            $request['limit'] = $limit;
+        }
+        $pageParam = $this->safe_value($params, 'page');
+        $request['page'] = 0;
+        if ($pageParam) {
+            $request['page'] = $pageParam;
+        }
+        $response = $this->v2PostOrderListOpen (array_merge ($request, $params));
+        if ($response['total'] === 0) {
+            return array();
+        }
+        return $this->parse_orders($response['list'], $market, $since, $limit);
     }
 
     public function fetch_order_book ($symbol, $limit = null, $params = array ()) {
