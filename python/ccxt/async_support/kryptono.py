@@ -49,7 +49,7 @@ class kryptono (Exchange):
                 'fetchOrder': True,
                 'fetchOrders': True,
                 'fetchOpenOrders': True,
-                'fetchClosedOrders': False,  # todo api/v2/order/list/completed
+                'fetchClosedOrders': False,
                 'fetchMyTrades': 'emulated',  # todo /api/v2/order/list/trades
             },
             'timeframes': {
@@ -89,7 +89,6 @@ class kryptono (Exchange):
                         # these endpoints require self.apiKey + self.secret
                         'account/balances',
                         'account/details',
-                        'order/list/completed',
                         'order/list/trades',
                         'order/trade-detail',
                     ],
@@ -98,6 +97,7 @@ class kryptono (Exchange):
                         'order/details',
                         'order/list/all',
                         'order/list/open',
+                        'order/list/completed',
                     ],
                 },
                 'market': {
@@ -352,6 +352,36 @@ class kryptono (Exchange):
         if response['total'] == 0:
             return []
         return self.parse_orders(response['list'], market, since, limit)
+
+    async def fetch_closed_orders(self, symbol=None, since=None, limit=None, params={}):
+        if symbol is None:
+            raise ArgumentsRequired(self.id + ' fetchOrders requires a symbol argument')
+        await self.load_markets()
+        market = self.market(symbol)
+        request = {
+            'symbol': market['id'],
+            'timestamp': self.milliseconds(),
+        }
+        recvWindowParam = self.safe_value(params, 'recvWindow')
+        recvWindow = 5000
+        if recvWindowParam:
+            recvWindow = recvWindowParam
+        request['recvWindow'] = recvWindow
+        request['limit'] = 50
+        if limit:
+            request['limit'] = limit
+        pageParam = self.safe_value(params, 'page')
+        request['page'] = 0
+        if pageParam:
+            request['page'] = pageParam
+        response = await self.v2PostOrderListCompleted(self.extend(request, params))
+        if response['total'] == 0:
+            return []
+        ordersToParse = []
+        for i in range(0, len(response['list'])):
+            if response['list'][i]['order_id']:
+                ordersToParse.append(response['list'][i])
+        return self.parse_orders(ordersToParse, market, since, limit)
 
     async def fetch_order_book(self, symbol, limit=None, params={}):
         await self.load_markets()
