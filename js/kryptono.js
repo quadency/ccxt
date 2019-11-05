@@ -39,7 +39,7 @@ module.exports = class kryptono extends Exchange {
                 'fetchOrders': true,
                 'fetchOpenOrders': true,
                 'fetchClosedOrders': false,
-                'fetchMyTrades': 'emulated', // todo /api/v2/order/list/trades
+                'fetchMyTrades': true,
             },
             'timeframes': {
                 // TODO: Check if all of these intervals are supported.
@@ -75,11 +75,8 @@ module.exports = class kryptono extends Exchange {
                     'get': [
                         'exchange-info',
                         'market-price',
-                        // these endpoints require this.apiKey + this.secret
                         'account/balances',
                         'account/details',
-                        'order/list/trades',
-                        'order/trade-detail',
                     ],
                     'post': [
                         'order/test',
@@ -87,6 +84,8 @@ module.exports = class kryptono extends Exchange {
                         'order/list/all',
                         'order/list/open',
                         'order/list/completed',
+                        'order/list/trades',
+                        'order/trade-detail',
                     ],
                 },
                 'market': {
@@ -411,6 +410,34 @@ module.exports = class kryptono extends Exchange {
         return this.parseOrders (ordersToParse, market, since, limit);
     }
 
+    async fetchMyTrades (symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        if (symbol === undefined) {
+            throw new ArgumentsRequired (this.id + ' fetchOrders requires a symbol argument');
+        }
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        const request = {
+            'symbol': market['id'],
+            'timestamp': this.milliseconds (),
+        };
+        const recvWindowParam = this.safeValue (params, 'recvWindow');
+        let recvWindow = 5000;
+        if (recvWindowParam) {
+            recvWindow = recvWindowParam;
+        }
+        request['recvWindow'] = recvWindow;
+        const fromId = this.safeValue (params, 'from_id');
+        if (fromId) {
+            request['from_id'] = fromId;
+        }
+        request['limit'] = 50;
+        if (limit) {
+            request['limit'] = limit;
+        }
+        const response = await this.v2PostOrderListTrades (this.extend (request, params));
+        return this.parseTrades (response, market, since, limit);
+    }
+
     async fetchOrderBook (symbol, limit = undefined, params = {}) {
         await this.loadMarkets ();
         const request = {
@@ -560,6 +587,29 @@ module.exports = class kryptono extends Exchange {
     }
 
     parseTrade (trade, market = undefined) {
+        let symbol = undefined;
+        if (market !== undefined) {
+            symbol = market['symbol'];
+        }
+        const order_id = this.safeString (trade, 'order_id');
+        if (order_id) {
+            console.log ('goes in here', trade);
+            return {
+                'info': trade,
+                // 'timestamp': timestamp,
+                // 'datetime': this.iso8601 (timestamp),
+                'symbol': symbol,
+                // 'id': id,
+                // 'order': undefined,
+                // 'type': 'limit',
+                // 'takerOrMaker': undefined,
+                // 'side': side,
+                // 'price': price,
+                // 'amount': amount,
+                // 'cost': cost,
+                // 'fee': undefined,
+            };
+        }
         const timestamp = trade['time'];
         let side = undefined;
         if (trade['isBuyerMaker'] === true) {
@@ -568,10 +618,6 @@ module.exports = class kryptono extends Exchange {
             side = 'sell';
         }
         const id = trade['id'];
-        let symbol = undefined;
-        if (market !== undefined) {
-            symbol = market['symbol'];
-        }
         let cost = undefined;
         const price = this.safeFloat (trade, 'price');
         const amount = this.safeFloat (trade, 'qty');
