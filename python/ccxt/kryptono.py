@@ -7,6 +7,7 @@ from ccxt.base.exchange import Exchange
 from ccxt.base.errors import ExchangeError
 from ccxt.base.errors import AuthenticationError
 from ccxt.base.errors import PermissionDenied
+from ccxt.base.errors import ArgumentsRequired
 from ccxt.base.errors import BadSymbol
 from ccxt.base.errors import InsufficientFunds
 from ccxt.base.errors import InvalidOrder
@@ -45,8 +46,8 @@ class kryptono (Exchange):
                 'fetchDeposits': False,
                 'fetchWithdrawals': False,
                 'fetchDepositAddress': False,
-                'fetchOrder': True,  # todo /api/v2/order/details
-                'fetchOrders': True,  # todo  /api/v2/order/list/completed
+                'fetchOrder': True,
+                'fetchOrders': True,  # todo  /api/v2/order/list/all
                 'fetchOpenOrders': True,  # todo /api/v2/order/list/open
                 'fetchClosedOrders': False,  # todo api/v2/order/list/completed
                 'fetchMyTrades': 'emulated',  # todo /api/v2/order/list/trades
@@ -88,7 +89,6 @@ class kryptono (Exchange):
                         # these endpoints require self.apiKey + self.secret
                         'account/balances',
                         'account/details',
-                        'order/list/all',
                         'order/list/open',
                         'order/list/completed',
                         'order/list/trades',
@@ -97,6 +97,7 @@ class kryptono (Exchange):
                     'post': [
                         'order/test',
                         'order/details',
+                        'order/list/all',
                     ],
                 },
                 'market': {
@@ -302,6 +303,29 @@ class kryptono (Exchange):
         request['recvWindow'] = recvWindow
         response = self.v2PostOrderDetails(self.extend(request, params))
         return self.parse_order(response)
+
+    def fetch_orders(self, symbol=None, since=None, limit=None, params={}):
+        if symbol is None:
+            raise ArgumentsRequired(self.id + ' fetchOrders requires a symbol argument')
+        self.load_markets()
+        market = self.market(symbol)
+        request = {
+            'symbol': market['id'],
+            'timestamp': self.milliseconds(),
+        }
+        recvWindowParam = self.safe_value(params, 'recvWindow')
+        recvWindow = 5000
+        if recvWindowParam:
+            recvWindow = recvWindowParam
+        request['recvWindow'] = recvWindow
+        fromId = self.safe_value(params, 'from_id')
+        if fromId:
+            request['from_id'] = fromId
+        request['limit'] = 50
+        if limit:
+            request['limit'] = limit
+        response = self.v2PostOrderListAll(self.extend(request, params))
+        return self.parse_orders(response, market, since, limit)
 
     def fetch_order_book(self, symbol, limit=None, params={}):
         self.load_markets()

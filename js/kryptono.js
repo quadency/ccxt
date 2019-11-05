@@ -3,7 +3,7 @@
 //  ---------------------------------------------------------------------------
 
 const Exchange = require ('./base/Exchange');
-// const { ExchangeError } = require ('./base/errors');
+const { ArgumentsRequired } = require ('./base/errors');
 const { TRUNCATE, DECIMAL_PLACES } = require ('./base/functions/number');
 
 //  ---------------------------------------------------------------------------
@@ -35,8 +35,8 @@ module.exports = class kryptono extends Exchange {
                 'fetchDeposits': false,
                 'fetchWithdrawals': false,
                 'fetchDepositAddress': false,
-                'fetchOrder': true, // todo /api/v2/order/details
-                'fetchOrders': true, // todo  /api/v2/order/list/completed
+                'fetchOrder': true,
+                'fetchOrders': true, // todo  /api/v2/order/list/all
                 'fetchOpenOrders': true, // todo /api/v2/order/list/open
                 'fetchClosedOrders': false, // todo api/v2/order/list/completed
                 'fetchMyTrades': 'emulated', // todo /api/v2/order/list/trades
@@ -78,7 +78,6 @@ module.exports = class kryptono extends Exchange {
                         // these endpoints require this.apiKey + this.secret
                         'account/balances',
                         'account/details',
-                        'order/list/all',
                         'order/list/open',
                         'order/list/completed',
                         'order/list/trades',
@@ -87,6 +86,7 @@ module.exports = class kryptono extends Exchange {
                     'post': [
                         'order/test',
                         'order/details',
+                        'order/list/all',
                     ],
                 },
                 'market': {
@@ -311,6 +311,34 @@ module.exports = class kryptono extends Exchange {
         request['recvWindow'] = recvWindow;
         const response = await this.v2PostOrderDetails (this.extend (request, params));
         return this.parseOrder (response);
+    }
+
+    async fetchOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        if (symbol === undefined) {
+            throw new ArgumentsRequired (this.id + ' fetchOrders requires a symbol argument');
+        }
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        const request = {
+            'symbol': market['id'],
+            'timestamp': this.milliseconds (),
+        };
+        const recvWindowParam = this.safeValue (params, 'recvWindow');
+        let recvWindow = 5000;
+        if (recvWindowParam) {
+            recvWindow = recvWindowParam;
+        }
+        request['recvWindow'] = recvWindow;
+        const fromId = this.safeValue (params, 'from_id');
+        if (fromId) {
+            request['from_id'] = fromId;
+        }
+        request['limit'] = 50;
+        if (limit) {
+            request['limit'] = limit;
+        }
+        const response = await this.v2PostOrderListAll (this.extend (request, params));
+        return this.parseOrders (response, market, since, limit);
     }
 
     async fetchOrderBook (symbol, limit = undefined, params = {}) {
