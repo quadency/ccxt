@@ -219,19 +219,16 @@ module.exports = class kryptono extends Exchange {
 
     async fetchBalance (params = {}) {
         await this.loadMarkets ();
-        // const response = await this.v2GetAccountBalances (params);
-        // const result = response.reduce (
-        //     (finalResult, asset) => {
-        //         finalResult[asset['currency_code']] = {
-        //             'free': asset.available,
-        //             'used': asset.in_order,
-        //             'total': asset.total,
-        //         };
-        //         return finalResult;
-        //     },
-        //     { 'info': response }
-        // );
-        // return this.parseBalance (result);
+        const response = await this.v2GetAccountBalances (params);
+        const result = { 'info': response };
+        for (let i = 0; i < response.length; i++) {
+            result[response[i]['currency_code']] = {
+                'free': response[i]['available'],
+                'used': response[i]['in_order'],
+                'total': response[i]['total'],
+            };
+        }
+        return this.parseBalance (result);
     }
 
     async fetchOrder (id, symbol = undefined, params = {}) {
@@ -512,13 +509,18 @@ module.exports = class kryptono extends Exchange {
         if (api !== 'v2' && api !== 'v3' && api !== 'v3public') {
             url += this.version + '/';
         }
-        const [ route ] = path.split ('/');
+        const route = path.split ('/')[0];
         if (route === 'account') {
             this.checkRequiredCredentials ();
             url += path;
+            const hasRecvWindow = this.safeValue (this.options, 'recvWindow');
+            let recvWindow = 5000;
+            if (hasRecvWindow) {
+                recvWindow = hasRecvWindow;
+            }
             const query = this.urlencode (this.extend ({
                 'timestamp': this.milliseconds (),
-                'recvWindow': this.options['recvWindow'],
+                'recvWindow': recvWindow,
             }, params));
             const signature = this.hmac (this.encode (query), this.encode (this.secret));
             url += '?' + query;
