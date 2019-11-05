@@ -78,12 +78,14 @@ module.exports = class kryptono extends Exchange {
                         // these endpoints require this.apiKey + this.secret
                         'account/balances',
                         'account/details',
-                        'order/details',
                         'order/list/all',
                         'order/list/open',
                         'order/list/completed',
                         'order/list/trades',
                         'order/trade-detail',
+                    ],
+                    'post': [
+                        'order/details',
                     ],
                 },
                 'market': {
@@ -231,12 +233,19 @@ module.exports = class kryptono extends Exchange {
         return this.parseBalance (result);
     }
 
+    // WIP
     async fetchOrder (id, symbol = undefined, params = {}) {
         const request = {
             'order_id': id,
             'timestamp': this.milliseconds (),
         };
-        request.recvWindow = params.recvWindow ? params.recvWindow : 5000;
+        const recvWindowObject = this.safeValue (this.options, 'recvWindow');
+        let recvWindow = 5000;
+        if (recvWindowObject) {
+            recvWindow = recvWindowObject;
+        }
+        request['recvWindow'] = recvWindow;
+        await this.v2PostOrderDetails (this.extend (request, params));
     }
 
     async fetchOrderBook (symbol, limit = undefined, params = {}) {
@@ -532,7 +541,6 @@ module.exports = class kryptono extends Exchange {
             };
         } else if (route === 'order') {
             this.checkRequiredCredentials ();
-            //  todo we may be able to combine with 'account' part of if statement above if body can be signed similarly
         } else { // public endpoints
             url += path;
             if (Object.keys (params).length) {
