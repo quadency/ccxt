@@ -258,7 +258,6 @@ module.exports = class kryptono extends Exchange {
     }
 
     parseOrder (order, market = undefined) {
-        console.log ('order raw', order);
         const timestamp = this.safeString (order, 'createTime');
         let symbol = undefined;
         const marketId = this.safeString (order, 'order_symbol');

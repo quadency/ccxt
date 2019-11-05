@@ -451,9 +451,6 @@ class Exchange(object):
             self.throttle()
         self.lastRestRequestTimestamp = self.milliseconds()
         request = self.sign(path, api, method, params, headers, body)
-
-        print("signgngng", request)
-
         getIt = self.fetch(request['url'], request['method'], request['headers'], request['body'])
         return getIt
 

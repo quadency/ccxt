@@ -78,12 +78,15 @@ class kryptono extends Exchange {
                         // these endpoints require $this->apiKey . $this->secret
                         'account/balances',
                         'account/details',
-                        'order/details',
                         'order/list/all',
                         'order/list/open',
                         'order/list/completed',
                         'order/list/trades',
                         'order/trade-detail',
+                    ),
+                    'post' => array (
+                        'order/test',
+                        'order/details',
                     ),
                 ),
                 'market' => array (
@@ -97,6 +100,14 @@ class kryptono extends Exchange {
                         'dp',
                         'ht',
                     ),
+                ),
+            ),
+            'fees' => array (
+                'trading' => array (
+                    'tierBased' => false,
+                    'percentage' => true,
+                    'taker' => 0.001,
+                    'maker' => 0.001,
                 ),
             ),
             // todo Trading API Information in `https://kryptono.exchange/k/api#developers-guide-api-v2-for-kryptono-exchange-july-13-2018`
@@ -219,6 +230,10 @@ class kryptono extends Exchange {
 
     public function fetch_balance ($params = array ()) {
         $this->load_markets();
+        $hasRecvWindow = $this->safe_value($params, 'recvWindow');
+        if (!$hasRecvWindow) {
+            $params['recvWindow'] = 5000;
+        }
         $response = $this->v2GetAccountBalances ($params);
         $result = array( 'info' => $response );
         for ($i = 0; $i < count ($response); $i++) {
@@ -231,18 +246,77 @@ class kryptono extends Exchange {
         return $this->parse_balance($result);
     }
 
+    public function parse_order_status ($status) {
+        $statuses = array (
+            'open' => 'open',
+            'partial_fill' => 'open',
+            'filled' => 'closed',
+            'canceled' => 'canceled',
+            'canceling' => 'open',
+        );
+        return $this->safe_string($statuses, $status, $status);
+    }
+
+    public function parse_order ($order, $market = null) {
+        $timestamp = $this->safe_string($order, 'createTime');
+        $symbol = null;
+        $marketId = $this->safe_string($order, 'order_symbol');
+        if ($marketId !== null) {
+            if (is_array($this->markets_by_id) && array_key_exists($marketId, $this->markets_by_id)) {
+                $market = $this->markets_by_id[$marketId];
+                $symbol = $market['symbol'];
+            } else {
+                list($baseId, $quoteId) = explode($this->options['symbolSeparator'], $marketId);
+                $symbol = $baseId . '/' . $quoteId;
+            }
+        }
+        $amount = $this->safe_float($order, 'order_size');
+        $filled = $this->safe_float($order, 'executed');
+        $remaining = null;
+        if ($amount !== null) {
+            if ($filled !== null) {
+                $remaining = $amount - $filled;
+            }
+        }
+        return array (
+            'id' => $this->safe_string($order, 'order_id'),
+            'info' => $order,
+            'timestamp' => $timestamp,
+            'datetime' => $this->iso8601 ($timestamp),
+            'lastTradeTimestamp' => null,
+            'status' => $this->parse_order_status($this->safe_string($order, 'status')),
+            'symbol' => $symbol,
+            'type' => $this->safe_string($order, 'type'),
+            'side' strtolower(=> ($this->safe_string($order, 'order_side'))),
+            'price' => $this->safe_float($order, 'order_price'),
+            'cost' => $this->safe_float($order, 'avg'),
+            'amount' => $amount,
+            'filled' => $filled,
+            'remaining' => $remaining,
+            'fee' => null,
+        );
+    }
+
     public function fetch_order ($id, $symbol = null, $params = array ()) {
+        $this->load_markets();
         $request = array (
             'order_id' => $id,
             'timestamp' => $this->milliseconds (),
         );
-        $request->recvWindow = $params->recvWindow ? $params->recvWindow : 5000;
+        $recvWindowParam = $this->safe_value($params, 'recvWindow');
+        $recvWindow = 5000;
+        if ($recvWindowParam) {
+            $recvWindow = $recvWindowParam;
+        }
+        $request['recvWindow'] = $recvWindow;
+        $response = $this->v2PostOrderDetails (array_merge ($request, $params));
+        return $this->parse_order($response);
     }
 
     public function fetch_order_book ($symbol, $limit = null, $params = array ()) {
         $this->load_markets();
         $request = array (
-            'symbol' => $symbol,
+            'symbol' => str_replace('/', '_', $symbol),
         );
         $response = $this->v1GetDp (array_merge ($request, $params));
         //
@@ -264,7 +338,7 @@ class kryptono extends Exchange {
         //     "time" : 1529298130192
         //   }
         //
-        return $this->parse_order_book($response, $response->time);
+        return $this->parse_order_book($response, $response['time']);
     }
 
     public function parse_ticker ($ticker, $market = null) {
@@ -387,6 +461,44 @@ class kryptono extends Exchange {
         return $this->filter_by_array($tickers, 'symbol', $symbols);
     }
 
+    public function parse_trade ($trade, $market = null) {
+        $timestamp = $trade['time'];
+        $side = null;
+        if ($trade['isBuyerMaker'] === true) {
+            $side = 'buy';
+        } else if ($trade['isBuyerMaker'] === false) {
+            $side = 'sell';
+        }
+        $id = $trade['id'];
+        $symbol = null;
+        if ($market !== null) {
+            $symbol = $market['symbol'];
+        }
+        $cost = null;
+        $price = $this->safe_float($trade, 'price');
+        $amount = $this->safe_float($trade, 'qty');
+        if ($amount !== null) {
+            if ($price !== null) {
+                $cost = $price * $amount;
+            }
+        }
+        return array (
+            'info' => $trade,
+            'timestamp' => $timestamp,
+            'datetime' => $this->iso8601 ($timestamp),
+            'symbol' => $symbol,
+            'id' => $id,
+            'order' => null,
+            'type' => 'limit',
+            'takerOrMaker' => null,
+            'side' => $side,
+            'price' => $price,
+            'amount' => $amount,
+            'cost' => $cost,
+            'fee' => null,
+        );
+    }
+
     public function fetch_ticker ($symbol, $params = array ()) {
         $this->load_markets();
         $market = $this->market ($symbol);
@@ -444,16 +556,16 @@ class kryptono extends Exchange {
 
     public function fetch_trades ($symbol, $since = null, $limit = null, $params = array ()) {
         $this->load_markets();
-        // $market = $this->market ($symbol);
-        // $request = array (
-        //     'symbol' => $symbol,
-        // );
-        // $response = $this->v1GetHt (array_merge ($request, $params));
+        $market = $this->market ($symbol);
+        $request = array (
+            'symbol' => str_replace('/', '_', $symbol),
+        );
+        $response = $this->v1GetHt (array_merge ($request, $params));
         //
         // {
         // "$symbol":"KNOW_BTC",
         // "$limit":100,
-        // "$history":array (
+        // "history":array (
         //     {
         //     "id":139638,
         //     "price":"0.00001723",
@@ -465,12 +577,11 @@ class kryptono extends Exchange {
         // "time":1529298130192
         // }
         //
-        // if (is_array($response) && array_key_exists('history', $response)) {
-        //     if ($response['history'] !== null) {
-        //         $history = $response->history.map (item => (array( ...item, 'timestamp' => item.time )));
-        //         return $this->parse_trades($history, $market, $since, $limit);
-        //     }
-        // }
+        if (is_array($response) && array_key_exists('history', $response)) {
+            if ($response['history'] !== null) {
+                return $this->parse_trades($response['history'], $market, $since, $limit);
+            }
+        }
         // throw new ExchangeError($this->id . ' fetchTrades() returned null response');
     }
 
@@ -506,18 +617,14 @@ class kryptono extends Exchange {
         $url = $this->implode_params($this->urls['api'][$api], array (
             'hostname' => $this->hostname,
         )) . '/';
-        if ($api !== 'v2' && $api !== 'v3' && $api !== 'v3public') {
+        if ($api !== 'v2' && $api !== 'v1' && $api !== 'market') {
             $url .= $this->version . '/';
         }
         $route = explode('/', $path)[0];
         if ($route === 'account') {
             $this->check_required_credentials();
             $url .= $path;
-            $hasRecvWindow = $this->safe_value($this->options, 'recvWindow');
-            $recvWindow = 5000;
-            if ($hasRecvWindow) {
-                $recvWindow = $hasRecvWindow;
-            }
+            $recvWindow = $this->safe_value($params, 'recvWindow');
             $query = $this->urlencode (array_merge (array (
                 'timestamp' => $this->milliseconds (),
                 'recvWindow' => $recvWindow,
@@ -532,7 +639,17 @@ class kryptono extends Exchange {
             );
         } else if ($route === 'order') {
             $this->check_required_credentials();
-            //  todo we may be able to combine with 'account' part of if statement above if $body can be signed similarly
+            $url .= $path;
+            if ($method !== 'GET') {
+                $body = $this->json ($params);
+            }
+            $signature = $this->hmac ($this->encode ($this->json ($params)), $this->encode ($this->secret));
+            $headers = array (
+                'Authorization' => $this->apiKey,
+                'Signature' => $signature,
+                'X-Requested-With' => 'XMLHttpRequest',
+                'Content-Type' => 'application/json',
+            );
         } else { // public endpoints
             $url .= $path;
             if ($params) {

@@ -88,12 +88,15 @@ class kryptono (Exchange):
                         # these endpoints require self.apiKey + self.secret
                         'account/balances',
                         'account/details',
-                        'order/details',
                         'order/list/all',
                         'order/list/open',
                         'order/list/completed',
                         'order/list/trades',
                         'order/trade-detail',
+                    ],
+                    'post': [
+                        'order/test',
+                        'order/details',
                     ],
                 },
                 'market': {
@@ -107,6 +110,14 @@ class kryptono (Exchange):
                         'dp',
                         'ht',
                     ],
+                },
+            },
+            'fees': {
+                'trading': {
+                    'tierBased': False,
+                    'percentage': True,
+                    'taker': 0.001,
+                    'maker': 0.001,
                 },
             },
             # todo Trading API Information in `https://kryptono.exchange/k/api#developers-guide-api-v2-for-kryptono-exchange-july-13-2018`
@@ -220,6 +231,9 @@ class kryptono (Exchange):
 
     def fetch_balance(self, params={}):
         self.load_markets()
+        hasRecvWindow = self.safe_value(params, 'recvWindow')
+        if not hasRecvWindow:
+            params['recvWindow'] = 5000
         response = self.v2GetAccountBalances(params)
         result = {'info': response}
         for i in range(0, len(response)):
@@ -230,17 +244,69 @@ class kryptono (Exchange):
             }
         return self.parse_balance(result)
 
+    def parse_order_status(self, status):
+        statuses = {
+            'open': 'open',
+            'partial_fill': 'open',
+            'filled': 'closed',
+            'canceled': 'canceled',
+            'canceling': 'open',
+        }
+        return self.safe_string(statuses, status, status)
+
+    def parse_order(self, order, market=None):
+        timestamp = self.safe_string(order, 'createTime')
+        symbol = None
+        marketId = self.safe_string(order, 'order_symbol')
+        if marketId is not None:
+            if marketId in self.markets_by_id:
+                market = self.markets_by_id[marketId]
+                symbol = market['symbol']
+            else:
+                baseId, quoteId = marketId.split(self.options['symbolSeparator'])
+                symbol = baseId + '/' + quoteId
+        amount = self.safe_float(order, 'order_size')
+        filled = self.safe_float(order, 'executed')
+        remaining = None
+        if amount is not None:
+            if filled is not None:
+                remaining = amount - filled
+        return {
+            'id': self.safe_string(order, 'order_id'),
+            'info': order,
+            'timestamp': timestamp,
+            'datetime': self.iso8601(timestamp),
+            'lastTradeTimestamp': None,
+            'status': self.parse_order_status(self.safe_string(order, 'status')),
+            'symbol': symbol,
+            'type': self.safe_string(order, 'type'),
+            'side': (self.safe_string(order, 'order_side')).lower(),
+            'price': self.safe_float(order, 'order_price'),
+            'cost': self.safe_float(order, 'avg'),
+            'amount': amount,
+            'filled': filled,
+            'remaining': remaining,
+            'fee': None,
+        }
+
     def fetch_order(self, id, symbol=None, params={}):
+        self.load_markets()
         request = {
             'order_id': id,
             'timestamp': self.milliseconds(),
         }
-        request.recvWindow = params.recvWindow if params.recvWindow else 5000
+        recvWindowParam = self.safe_value(params, 'recvWindow')
+        recvWindow = 5000
+        if recvWindowParam:
+            recvWindow = recvWindowParam
+        request['recvWindow'] = recvWindow
+        response = self.v2PostOrderDetails(self.extend(request, params))
+        return self.parse_order(response)
 
     def fetch_order_book(self, symbol, limit=None, params={}):
         self.load_markets()
         request = {
-            'symbol': symbol,
+            'symbol': symbol.replace('/', '_'),
         }
         response = self.v1GetDp(self.extend(request, params))
         #
@@ -262,7 +328,7 @@ class kryptono (Exchange):
         #     "time" : 1529298130192
         #   }
         #
-        return self.parse_order_book(response, response.time)
+        return self.parse_order_book(response, response['time'])
 
     def parse_ticker(self, ticker, market=None):
         #
@@ -375,6 +441,39 @@ class kryptono (Exchange):
             tickers.append(ticker)
         return self.filter_by_array(tickers, 'symbol', symbols)
 
+    def parse_trade(self, trade, market=None):
+        timestamp = trade['time']
+        side = None
+        if trade['isBuyerMaker'] is True:
+            side = 'buy'
+        elif trade['isBuyerMaker'] == False:
+            side = 'sell'
+        id = trade['id']
+        symbol = None
+        if market is not None:
+            symbol = market['symbol']
+        cost = None
+        price = self.safe_float(trade, 'price')
+        amount = self.safe_float(trade, 'qty')
+        if amount is not None:
+            if price is not None:
+                cost = price * amount
+        return {
+            'info': trade,
+            'timestamp': timestamp,
+            'datetime': self.iso8601(timestamp),
+            'symbol': symbol,
+            'id': id,
+            'order': None,
+            'type': 'limit',
+            'takerOrMaker': None,
+            'side': side,
+            'price': price,
+            'amount': amount,
+            'cost': cost,
+            'fee': None,
+        }
+
     def fetch_ticker(self, symbol, params={}):
         self.load_markets()
         market = self.market(symbol)
@@ -431,11 +530,11 @@ class kryptono (Exchange):
 
     def fetch_trades(self, symbol, since=None, limit=None, params={}):
         self.load_markets()
-        # market = self.market(symbol)
-        # request = {
-        #     'symbol': symbol,
-        #}
-        # response = self.v1GetHt(self.extend(request, params))
+        market = self.market(symbol)
+        request = {
+            'symbol': symbol.replace('/', '_'),
+        }
+        response = self.v1GetHt(self.extend(request, params))
         #
         # {
         # "symbol":"KNOW_BTC",
@@ -452,12 +551,9 @@ class kryptono (Exchange):
         # "time":1529298130192
         #}
         #
-        # if 'history' in response:
-        #     if response['history'] is not None:
-        #         history = response.history.map(item =>({...item, 'timestamp': item.time}))
-        #         return self.parse_trades(history, market, since, limit)
-        #     }
-        #}
+        if 'history' in response:
+            if response['history'] is not None:
+                return self.parse_trades(response['history'], market, since, limit)
         # raise ExchangeError(self.id + ' fetchTrades() returned None response')
 
     def parse_ohlcv(self, ohlcv, market=None, timeframe='1d', since=None, limit=None):
@@ -488,16 +584,13 @@ class kryptono (Exchange):
         url = self.implode_params(self.urls['api'][api], {
             'hostname': self.hostname,
         }) + '/'
-        if api != 'v2' and api != 'v3' and api != 'v3public':
+        if api != 'v2' and api != 'v1' and api != 'market':
             url += self.version + '/'
         route = path.split('/')[0]
         if route == 'account':
             self.check_required_credentials()
             url += path
-            hasRecvWindow = self.safe_value(self.options, 'recvWindow')
-            recvWindow = 5000
-            if hasRecvWindow:
-                recvWindow = hasRecvWindow
+            recvWindow = self.safe_value(params, 'recvWindow')
             query = self.urlencode(self.extend({
                 'timestamp': self.milliseconds(),
                 'recvWindow': recvWindow,
@@ -512,7 +605,16 @@ class kryptono (Exchange):
             }
         elif route == 'order':
             self.check_required_credentials()
-            #  todo we may be able to combine with 'account' part of if statement above if body can be signed similarly
+            url += path
+            if method != 'GET':
+                body = self.json(params)
+            signature = self.hmac(self.encode(self.json(params)), self.encode(self.secret))
+            headers = {
+                'Authorization': self.apiKey,
+                'Signature': signature,
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/json',
+            }
         else:  # public endpoints
             url += path
             if params:
