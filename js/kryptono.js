@@ -259,7 +259,7 @@ module.exports = class kryptono extends Exchange {
     async fetchOrderBook (symbol, limit = undefined, params = {}) {
         await this.loadMarkets ();
         const request = {
-            'symbol': symbol.split ('/').join ('_'),
+            'symbol': symbol.replace ('/', '_'),
         };
         const response = await this.v1GetDp (this.extend (request, params));
         //
@@ -281,7 +281,7 @@ module.exports = class kryptono extends Exchange {
         //     "time" : 1529298130192
         //   }
         //
-        return this.parseOrderBook (response, response.time);
+        return this.parseOrderBook (response, response['time']);
     }
 
     parseTicker (ticker, market = undefined) {
@@ -412,7 +412,7 @@ module.exports = class kryptono extends Exchange {
         } else if (trade['isBuyerMaker'] === false) {
             side = 'sell';
         }
-        const id = trade.id;
+        const id = trade['id'];
         let symbol = undefined;
         if (market !== undefined) {
             symbol = market['symbol'];
@@ -501,7 +501,7 @@ module.exports = class kryptono extends Exchange {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const request = {
-            'symbol': symbol.split ('/').join ('_'),
+            'symbol': symbol.replace ('/', '_'),
         };
         const response = await this.v1GetHt (this.extend (request, params));
         //
@@ -522,7 +522,7 @@ module.exports = class kryptono extends Exchange {
         //
         if ('history' in response) {
             if (response['history'] !== undefined) {
-                return this.parseTrades (response.history, market, since, limit);
+                return this.parseTrades (response['history'], market, since, limit);
             }
         }
         // throw new ExchangeError (this.id + ' fetchTrades() returned undefined response');
