@@ -451,7 +451,7 @@ module.exports = class coineal extends Exchange {
         return this.parseTrades (this.safeValue (response, 'data'), market, since, limit);
     }
 
-    async createOrder (symbol, type, side, amount, price = undefined, params = undefined) {
+    async createOrder (symbol, type, side, amount, price = undefined, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const request = {
@@ -471,7 +471,7 @@ module.exports = class coineal extends Exchange {
                 if (currentPrice === undefined) {
                     throw new InvalidOrder ('Provide correct Symbol');
                 }
-                request['volume'] = this.costToPrecision (symbol, amount * currentPrice);
+                request['volume'] = this.costToPrecision (symbol, parseFloat (amount) * currentPrice);
             }
         }
         const response = await this.privatePostOpenApiCreateOrder (this.extend (request, params));

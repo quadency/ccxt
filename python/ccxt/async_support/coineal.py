@@ -435,7 +435,7 @@ class coineal(Exchange):
         # }
         return self.parse_trades(self.safe_value(response, 'data'), market, since, limit)
 
-    async def create_order(self, symbol, type, side, amount, price=None, params=None):
+    async def create_order(self, symbol, type, side, amount, price=None, params={}):
         await self.load_markets()
         market = self.market(symbol)
         request = {
@@ -454,7 +454,7 @@ class coineal(Exchange):
                 currentPrice = self.safe_float(currentSymbolDetail, 'last')
                 if currentPrice is None:
                     raise InvalidOrder('Provide correct Symbol')
-                request['volume'] = self.cost_to_precision(symbol, amount * currentPrice)
+                request['volume'] = self.cost_to_precision(symbol, float(amount) * currentPrice)
         response = await self.privatePostOpenApiCreateOrder(self.extend(request, params))
         # Exchange response
         # {

@@ -459,7 +459,7 @@ class coineal extends Exchange {
         return $this->parse_trades($this->safe_value($response, 'data'), $market, $since, $limit);
     }
 
-    public function create_order ($symbol, $type, $side, $amount, $price = null, $params = null) {
+    public function create_order ($symbol, $type, $side, $amount, $price = null, $params = array ()) {
         $this->load_markets();
         $market = $this->market ($symbol);
         $request = array(
@@ -479,7 +479,7 @@ class coineal extends Exchange {
                 if ($currentPrice === null) {
                     throw new InvalidOrder('Provide correct Symbol');
                 }
-                $request['volume'] = $this->cost_to_precision($symbol, $amount * $currentPrice);
+                $request['volume'] = $this->cost_to_precision($symbol, floatval ($amount) * $currentPrice);
             }
         }
         $response = $this->privatePostOpenApiCreateOrder (array_merge($request, $params));
