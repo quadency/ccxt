@@ -456,6 +456,17 @@ module.exports = class coineal extends Exchange {
         return this.parseTrades (this.safeValue (response, 'data'), market, since, limit);
     }
 
+    parseExecuteOrder (order, id = undefined) {
+        let orderId = id;
+        if (orderId === undefined) {
+            orderId = this.safeString (order, 'order_id');
+        }
+        return {
+            'info': order,
+            'id': orderId,
+        };
+    }
+
     async createOrder (symbol, type, side, amount, price = undefined, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
@@ -488,12 +499,7 @@ module.exports = class coineal extends Exchange {
         //         "order_id": 34343
         //     }
         // }
-        const code = this.safeString (response, 'code');
-        if (code !== '0') {
-            throw new InvalidOrder (response['msg'] + ' ' + this.json (response));
-        }
-        const result = this.safeValue (response, 'data');
-        return await this.fetchOrder (this.safeString (result, 'order_id'), symbol);
+        return this.parseExecuteOrder (this.safeValue (response, 'data'));
     }
 
     async cancelOrder (id, symbol = undefined, params = {}) {
@@ -508,17 +514,7 @@ module.exports = class coineal extends Exchange {
             'time': this.milliseconds (),
         };
         const response = await this.privatePostOpenApiCancelOrder (this.extend (request, params));
-        // Exchange response
-        // {
-        //     "code": "0",
-        //     "msg": "suc",
-        //     "data": {}
-        // }
-        const code = this.safeString (response, 'code');
-        if (code !== '0') {
-            throw new InvalidOrder (response['msg'] + ' ' + this.json (response));
-        }
-        return await this.fetchOrder (id, symbol);
+        return this.parseExecuteOrder (response, id);
     }
 
     async getTrades (symbol, limit, params) {
@@ -603,9 +599,9 @@ module.exports = class coineal extends Exchange {
         const filled = this.safeFloat (order, 'deal_volume');
         const remaining = this.safeFloat (order, 'remain_volume');
         let amount = this.safeFloat (order, 'volume');
-        if (filled !== undefined) {
-            if (remaining !== undefined) {
-                amount = this.amountToPrecision (symbol, filled + remaining);
+        if (amount !== undefined) {
+            if (filled !== undefined && remaining !== undefined) {
+                amount = parseFloat (this.amountToPrecision (symbol, filled + remaining));
             }
         }
         let id = this.safeString (order, 'order_id');
@@ -686,6 +682,9 @@ module.exports = class coineal extends Exchange {
     }
 
     async fetchCommonOrders (symbol, limit, params) {
+        if (limit === undefined) {
+            limit = 100;
+        }
         const request = {
             'symbol': symbol,
             'time': this.milliseconds (),
